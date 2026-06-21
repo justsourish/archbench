@@ -149,6 +149,8 @@ export function parseMarkdownToProject(md: string): Project {
                         currentNode.desc = val;
                     } else if (key === "flow") {
                         currentNode.flow = val.split("→").map(s => s.trim());
+                    } else if (key === "nodetype" || key === "node_type") {
+                        currentNode.nodeType = val;
                     } else {
                         if (!currentNode.sections) currentNode.sections = [];
                         currentNode.sections.push({
