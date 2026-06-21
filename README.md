@@ -2,7 +2,7 @@
 
 ArchBench is a local-first architecture workbench built with vanilla JavaScript. It lets you model systems as code, visualize service relationships, simulate flows, export architecture context for LLMs, and keep audit history in the browser with no backend or account system.
 
-**Hosted Demo:** [https://archbench.netlify.app/](https://archbench.netlify.app/)
+**Use it online:** [https://archbench.netlify.app/](https://archbench.netlify.app/)
 
 ## What ships in this release
 
