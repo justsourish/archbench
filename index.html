@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="graph.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </head>
 <body>
 
@@ -132,6 +133,7 @@
             <button class="fp-tab" id="tab-btn-history">Architecture History</button>
             <button class="fp-tab" id="tab-btn-ai">AI Analysis</button>
             <button class="fp-tab" id="tab-btn-pack">Knowledge Pack</button>
+            <button class="fp-tab" id="tab-btn-terminal">Terminal</button>
         </div>
 
         <!-- 1. Simulator Panel -->
@@ -256,6 +258,16 @@
                         Run sequential simulation audits to accumulate history records.
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <!-- 8. Project Agent Terminal Panel -->
+        <div class="fp-tab-panel" id="panel-terminal">
+            <div class="log-view-container" style="max-height: 250px; overflow-y: auto;">
+                <p style="font-size:10px; color:var(--text-secondary); line-height:1.4; margin-bottom: 8px;">
+                    Execute architecture commands inside the workspace environment. Type <code>help</code> to list active commands.
+                </p>
+                <div id="terminal-container" style="height: 190px; width: 100%; background: #07080d; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; overflow: hidden; padding: 6px;"></div>
             </div>
         </div>
     </div>
@@ -418,6 +430,7 @@ Version: 1.0
         <span>Press <kbd>F</kbd> to fit</span>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
     <script src="samples/trace.js"></script>
     <script src="graph.js"></script>
 </body>

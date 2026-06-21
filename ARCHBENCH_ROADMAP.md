@@ -200,7 +200,33 @@ An external agent can programmatically read, write, and validate project archite
 
 ---
 
-# Sprint 7 — LLM Integration Layer
+# Sprint 7 — Project Agent Terminal
+
+Goal:
+
+Architecture-aware in-app terminal shell console.
+
+Tasks:
+
+* Load xterm.js styling and script files dynamically from browser CDN.
+* Add collapsible terminal view panel inside tab list container.
+* Build interactive mock command processor shell (`archbench:current-project$`).
+* Wire architecture-aware console commands:
+  * `help`: Lists commands.
+  * `arch parse`: Parsed project nodes/connections validation.
+  * `arch simulate <flow>`: Steps simulation sequence.
+  * `arch audit`: Runs coupling and health checks.
+  * `arch compare`: Queries IndexedDB snapshot history logs.
+  * `arch export`: Triggers spec Markdown download.
+  * `clear`: Clears xterm console view.
+
+Success Criteria:
+
+Intra-app xterm terminal behaves as an active workspace shell to audit, simulate, and inspect the project directly.
+
+---
+
+# Sprint 8 — LLM Integration Layer
 
 Goal:
 
@@ -227,35 +253,6 @@ Success Criteria:
 
 User can connect any model.
 
----
-
-# Sprint 8 — Project Agent Terminal
-
-Goal:
-
-Architecture-aware terminal.
-
-Tasks:
-
-* Add xterm.js terminal.
-* Terminal scoped to selected project.
-* Architecture-aware commands.
-
-Examples:
-
-arch parse
-
-arch simulate
-
-arch audit
-
-arch compare
-
-arch export
-
-Success Criteria:
-
-Intra-app terminal can operate the workspace.
 
 ---
 
