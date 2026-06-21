@@ -878,6 +878,7 @@
     // ─── ARCHITECTURE IDE LOGS & AI EXPORTS ──────────────────────
 
     const btnIde = document.getElementById("btn-ide");
+    const btnTermToggle = document.getElementById("btn-term-toggle");
     const tabBtnSimulator = document.getElementById("tab-btn-simulator");
     const tabBtnLog = document.getElementById("tab-btn-log");
     const tabBtnAi = document.getElementById("tab-btn-ai");
@@ -1424,6 +1425,35 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     if (tabBtnHealth) tabBtnHealth.addEventListener("click", () => switchTab("health"));
     if (tabBtnHistory) tabBtnHistory.addEventListener("click", () => switchTab("history"));
     if (tabBtnTerminal) tabBtnTerminal.addEventListener("click", () => switchTab("terminal"));
+
+    if (btnTermToggle) {
+        btnTermToggle.addEventListener("click", () => {
+            stopAutoPlay();
+            flowPanel.classList.add("visible");
+
+            if (currentDockState === "float") {
+                const origDisplay = flowPanel.style.display;
+                flowPanel.style.display = "flex";
+                const rect = flowPanel.getBoundingClientRect();
+                flowPanel.style.display = origDisplay;
+
+                const w = rect.width || 520;
+                const h = rect.height || 380;
+
+                if (!panelPosition) {
+                    panelPosition = {
+                        x: (window.innerWidth - w) / 2,
+                        y: (window.innerHeight - h) / 2
+                    };
+                }
+                flowPanel.style.left = panelPosition.x + "px";
+                flowPanel.style.top = panelPosition.y + "px";
+            }
+
+            switchTab("terminal");
+            fpTitle.textContent = "Project Agent Terminal Shell";
+        });
+    }
 
     // Topbar IDE action launcher
     btnIde.addEventListener("click", () => {
