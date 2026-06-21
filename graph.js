@@ -12,6 +12,7 @@
 
     let LAYERS = [];
     let TRUST_BOUNDARY = null;
+    let trustEl = null;
 
     const DEFAULT_LAYERS = [
         { id: "entry",    label: "Entry Points — User-Facing Applications",  y: 150,  h: 420,  cls: "entry" },
@@ -541,7 +542,7 @@
         });
 
         // Reset trust boundary
-        trustEl.classList.remove("flow-highlight");
+        if (trustEl) trustEl.classList.remove("flow-highlight");
 
         // Reset connection states
         clearFlowConnections();
@@ -679,7 +680,7 @@
         applyFlowToConnections();
 
         // ── Trust boundary highlight ──
-        trustEl.classList.toggle("flow-highlight", !!step.trustHighlight);
+        if (trustEl) trustEl.classList.toggle("flow-highlight", !!step.trustHighlight);
 
         // ── Pan camera to current node ──
         panToNode(step.node, true);
@@ -3284,7 +3285,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         
         // Render trust boundary
         if (TRUST_BOUNDARY) {
-            const trustEl = document.createElement("div");
+            trustEl = document.createElement("div");
             trustEl.className = "trust-boundary";
             trustEl.id = "trust-boundary";
             trustEl.style.left   = TRUST_BOUNDARY.x + "px";
@@ -3296,6 +3297,8 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
                 <span class="trust-boundary-note">${TRUST_BOUNDARY.note || ""}</span>
             `;
             canvas.appendChild(trustEl);
+        } else {
+            trustEl = null;
         }
         
         // Re-render nodes
