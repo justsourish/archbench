@@ -5,8 +5,14 @@
 // Layered architecture + interactive flow playback.
 // ============================================================
 
-(() => {
-    "use strict";
+import { AI_PROMPTS } from "./js/constants.js";
+import { showToast, copyToClipboard, downloadFile, renderMarkdownToHtml } from "./js/utils.js";
+import { parseMarkdownToProject, exportProjectToMarkdown, validateProjectData } from "./js/parser.js";
+import { calculateArchitectureQualityScore, calculateDatabaseDependencyScore } from "./js/metrics.js";
+import { generateArchitectureHealthReport } from "./js/reports/health-engine.js";
+import { generateExecutionLogJSON, generateExecutionLogMarkdown, generateKnowledgePackJSON, generateKnowledgePackMarkdown } from "./js/reports/generators.js";
+import { toggleLiveWatch } from "./js/live-watch.js";
+import { initTerminalOnce } from "./js/terminal.js";
 
     // ─── Layer Zones & Boundaries (Project-specific layout state) ────────────────
 
@@ -29,7 +35,7 @@
     };
 
     // ─── Project Loading (Dynamic configuration from window.ARCHBENCH_PROJECT_MD or window.ARCHBENCH_PROJECT) ───
-    let project = { title: "Untitled Project", version: "1.0", nodes: [], connections: [], flows: [] };
+    export let project = { title: "Untitled Project", version: "1.0", nodes: [], connections: [], flows: [] };
     if (window.ARCHBENCH_PROJECT_MD) {
         try {
             project = parseMarkdownToProject(window.ARCHBENCH_PROJECT_MD);
@@ -40,10 +46,10 @@
     } else if (window.ARCHBENCH_PROJECT) {
         project = window.ARCHBENCH_PROJECT;
     }
-    let currentProject = null;
-    let NODES = [];
-    let CONNECTIONS = [];
-    let FLOWS = [];
+    export let currentProject = null;
+    export let NODES = [];
+    export let CONNECTIONS = [];
+    export let FLOWS = [];
 
     // ─── DOM References ─────────────────────────────────────────
 
@@ -102,8 +108,8 @@
     const nodeData = {};
 
     // Flow state
-    let activeFlow    = null;
-    let activeStep    = -1;
+    export let activeFlow    = null;
+    export let activeStep    = -1;
     let isAutoPlaying = false;
     let autoTimer     = null;
 
@@ -887,440 +893,13 @@
     const btnDownloadPackJson = document.getElementById("btn-download-pack-json");
     const btnDownloadPackMd = document.getElementById("btn-download-pack-md");
 
-    const AI_PROMPTS = {
-        review: {
-            title: "Review Architecture",
-            desc: "Evaluate overall design, structural coupling, and reliability.",
-            prompt: (context) => `You are a Principal Software Architect. Review the following system architecture details:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Provide a critical architectural review of this ecosystem. Identify structural bottlenecks, coupling risks, and verify if the layers (Entry Points, Core Services, Infrastructure) follow clean architecture and service boundaries.`
-        },
-        missing: {
-            title: "Find Missing Components",
-            desc: "Scan for missing logging, telemetry, queues, or single points of failure.",
-            prompt: (context) => `You are a Principal Software Architect. Analyze the following system architecture details:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Audit this system design for single points of failure, missing components (e.g. caching, message brokers, load balancing, background worker queues, alert dispatchers), and suggest infrastructure additions to make it production-ready.`
-        },
-        redundant: {
-            title: "Find Redundant Systems",
-            desc: "Check for duplicate responsibilities or unnecessary services.",
-            prompt: (context) => `You are a Principal Software Architect. Review the following architecture context:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Analyze the components for design redundancies, duplicate data stores, overlapping roles, or unnecessary intermediate endpoints. Recommend consolidation pathways.`
-        },
-        security: {
-            title: "Find Security Risks",
-            desc: "Audit trust boundaries, encryption pathways, and vector entry points.",
-            prompt: (context) => `You are an Application Security Architect. Audit the security posture of the system based on this architecture and the flow log:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Review the Trust Boundary, data flow pathways, and any payload encryption flows. Highlight vectors for potential replay attacks, man-in-the-middle attacks, key leakage, and suggest mitigations (e.g. double encryption, rate limiting, device fingerprinting checks).`
-        },
-        api: {
-            title: "Generate API Design",
-            desc: "Create REST or gRPC contracts for the communication paths.",
-            prompt: (context) => `You are a Lead Backend Engineer. Design the APIs connecting these nodes based on the following context:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Write a clean OpenAPI 3.0 spec (or detailed REST endpoints) in YAML for the interfaces between Entry Points and the Backend Services described in the flows.`
-        },
-        schema: {
-            title: "Generate Database Schema",
-            desc: "Create PostgreSQL or schema definitions for the product identity data model.",
-            prompt: (context) => `You are a Principal Database Administrator. Design the database schema based on this model:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Generate SQL DDL (PostgreSQL) creating tables, constraints, indexes, and primary/foreign keys for the Database node, capturing the core tables, state log history, and schemas.`
-        },
-        sequence: {
-            title: "Generate Sequence Diagram",
-            desc: "Create a Mermaid.js sequence diagram of the active flow.",
-            prompt: (context) => `You are a Technical Writer. Convert the following architecture context and recorded execution log into a Mermaid.js sequence diagram:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Generate a valid Mermaid.js sequence diagram syntax showing the interactions between the nodes during the flows.`
-        },
-        documentation: {
-            title: "Generate Technical Documentation",
-            desc: "Write detailed system design documentation for engineering teams.",
-            prompt: (context) => `You are a Technical Document Engineer. Write system design documentation based on this context:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Produce a structured, comprehensive system design document for the platform including executive summary, system topology, service responsibilities, and request flows.`
-        },
-        sop: {
-            title: "Generate SOPs",
-            desc: "Create Standard Operating Procedures for brand manufacturing steps.",
-            prompt: (context) => `You are an Operations Manager. Write standard operating procedures based on the architecture context:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Draft a formal SOP detailing:
-1. Node setup and registration.
-2. Operational checkpoints.
-3. Execution verification steps.
-Include error-handling guidelines.`
-        },
-        stories: {
-            title: "Generate User Stories",
-            desc: "Create Agile user stories for components development.",
-            prompt: (context) => `You are a Product Owner. Write Agile User Stories based on this context:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Generate complete User Stories (with 'As a...', 'I want to...', 'So that...' structure) and corresponding Acceptance Criteria for building the core flows.`
-        },
-        tasks: {
-            title: "Generate Engineering Tasks",
-            desc: "Create Jira/Github tasks with description and sub-tasks.",
-            prompt: (context) => `You are a Scrum Master. Generate engineering subtasks from this architecture:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Provide a list of structured engineering tickets (Jira style) complete with title, description, technical implementation checklist, and test criteria for building the core system interfaces.`
-        },
-        testcases: {
-            title: "Generate Test Cases",
-            desc: "Provide QA test specifications for verification logic.",
-            prompt: (context) => `You are a Lead QA Engineer. Generate QA test specifications based on this architecture context:
-
-=== ARCHITECTURE CONTEXT ===
-${context}
-
-=== TASK ===
-Write detailed test specifications (both happy path and edge/fail cases) for verifying the system components and validating the simulation workflows.`
-        }
-    };
+    // AI_PROMPTS moved to js/constants.js
 
     let selectedAiKey = "review";
 
-    function generateExecutionLogJSON(flow, currentStepIndex) {
-        if (!flow) return null;
-        const logSteps = flow.steps.slice(0, currentStepIndex + 1).map((s, idx) => {
-            const nodeObj = NODES.find(n => n.id === s.node);
-            return {
-                step: idx + 1,
-                node: nodeObj ? nodeObj.title : s.node,
-                action: s.label,
-                details: s.detail,
-                data: s.data || "N/A"
-            };
-        });
-        return {
-            flow: flow.title,
-            version: "1.0",
-            timestamp: new Date().toISOString(),
-            steps: logSteps
-        };
-    }
+    // generateExecutionLogJSON, generateExecutionLogMarkdown, generateKnowledgePackJSON, and generateKnowledgePackMarkdown moved to js/reports/generators.js
 
-    function generateExecutionLogMarkdown(flow, currentStepIndex) {
-        if (!flow) return "No active simulation flow.";
-        const log = generateExecutionLogJSON(flow, currentStepIndex);
-        let md = `# Simulation Execution Log: ${log.flow}\n\n`;
-        md += `* **Timestamp:** ${log.timestamp}\n`;
-        md += `* **Ecosystem Version:** ${log.version || project.version || "1.0"}\n\n`;
-        md += `## Executed Steps\n\n`;
-        md += `| Step | System Node | Action / Label | Data / Payload |\n`;
-        md += `|---|---|---|---|\n`;
-        log.steps.forEach(s => {
-            md += `| ${s.step} | **${s.node}** | ${s.action} | \`${s.data}\` |\n`;
-        });
-        md += `\n\n### Step Details\n\n`;
-        log.steps.forEach(s => {
-            md += `#### Step ${s.step}: ${s.node}\n`;
-            md += `* **Action:** ${s.action}\n`;
-            md += `* **Description:** ${s.details}\n`;
-            md += `* **Data Transferred:** \`${s.data}\`\n\n`;
-        });
-        return md;
-    }
-
-    function generateKnowledgePackJSON() {
-        return {
-            metadata: {
-                project: project.title || "Untitled Project",
-                document: "Architecture Knowledge Pack",
-                version: project.version || "1.0",
-                exportedAt: new Date().toISOString()
-            },
-            nodes: NODES.map(n => ({
-                id: n.id,
-                title: n.title,
-                category: n.category,
-                description: n.desc,
-                structure: n.sections || [],
-                flowNotes: n.flow || null,
-                callout: n.callout || null
-            })),
-            connections: CONNECTIONS.map(([from, to, label, type]) => ({
-                from,
-                to,
-                label,
-                type: type === "request" ? "Request Flow (Solid)" : (type === "data" ? "Data Flow (Dashed)" : "Future Evolution (Dotted)")
-            })),
-            flows: FLOWS.map(f => ({
-                id: f.id,
-                title: f.title,
-                subtitle: f.subtitle,
-                steps: f.steps.map((s, idx) => ({
-                    step: idx + 1,
-                    node: s.node,
-                    action: s.label,
-                    description: s.detail,
-                    data: s.data
-                }))
-            })),
-            activeSimulationLog: activeFlow ? generateExecutionLogJSON(activeFlow, activeStep) : null,
-            unifiedBatchLog: unifiedBatchLog || null,
-            architectureHealthReport: unifiedBatchLog ? generateArchitectureHealthReport(unifiedBatchLog) : null,
-            history: {
-                auditRuns: localHistoryCache.auditRuns,
-                snapshots: localHistoryCache.architectureSnapshots,
-                healthHistory: localHistoryCache.healthHistory
-            }
-        };
-    }
-
-    function generateKnowledgePackMarkdown() {
-        const pack = generateKnowledgePackJSON();
-        let md = `# Architecture Context & Knowledge Pack\n\n`;
-        md += `*Generated automatically by Architecture Workbench on ${pack.metadata.exportedAt}*\n\n`;
-        md += `---\n\n`;
-        
-        md += `## 1. System Nodes & Responsibilities\n\n`;
-        pack.nodes.forEach(n => {
-            md += `### ${n.title} (${n.category})\n`;
-            md += `${n.description}\n\n`;
-            if (n.structure.length > 0) {
-                n.structure.forEach(s => {
-                    if (s.label) md += `* **${s.label}:**\n`;
-                    s.items.forEach(item => {
-                        md += `  * ${item.replace('~', '').replace('*', '')}\n`;
-                    });
-                });
-            }
-            if (n.callout) {
-                md += `> **[${n.callout.type.toUpperCase()}]** ${n.callout.text}\n\n`;
-            }
-            md += `\n`;
-        });
-        
-        md += `## 2. System Connections & Data Streams\n\n`;
-        md += `| Source System | Target System | Interaction / Stream | Type |\n`;
-        md += `|---|---|---|---|\n`;
-        pack.connections.forEach(c => {
-            md += `| ${c.from} | ${c.to} | ${c.label} | ${c.type} |\n`;
-        });
-        md += `\n\n`;
-        
-        md += `## 3. Standard Simulation Flows\n\n`;
-        pack.flows.forEach(f => {
-            md += `### Flow: ${f.title}\n`;
-            md += `*${f.subtitle}*\n\n`;
-            f.steps.forEach(s => {
-                md += `* **Step ${s.step} [${s.node}]:** ${s.action}\n`;
-                md += `  * *Details:* ${s.description}\n`;
-                md += `  * *Data:* \`${s.data}\`\n`;
-            });
-            md += `\n`;
-        });
-        
-        if (pack.activeSimulationLog) {
-            md += `## 4. Current Recorded Execution Log\n\n`;
-            md += `The simulator recorded an active run of **${pack.activeSimulationLog.flow}**:\n\n`;
-            md += `| Step | System Node | Action / Label | Data / Payload |\n`;
-            md += `|---|---|---|---|\n`;
-            pack.activeSimulationLog.steps.forEach(s => {
-                md += `| ${s.step} | **${s.node}** | ${s.action} | \`${s.data}\` |\n`;
-            });
-        }
-
-        if (pack.unifiedBatchLog) {
-            md += `\n\n---\n\n`;
-            md += `## 5. Unified Audit Log\n\n`;
-            md += `The simulator recorded a batch audit trail of the following workflows: ${pack.unifiedBatchLog.flowsSimulated.join(", ")}\n\n`;
-            md += `| Seq | Flow Scenario | System Node | Action / Label | Data / Payload |\n`;
-            md += `|---|---|---|---|---|\n`;
-            pack.unifiedBatchLog.steps.forEach(s => {
-                md += `| ${s.seq} | **${s.flow}** | **${s.node}** | ${s.action} | \`${s.data}\` |\n`;
-            });
-
-            if (pack.architectureHealthReport) {
-                const report = pack.architectureHealthReport;
-                md += `\n\n---\n\n`;
-                md += `## 6. Architecture Health Report\n\n`;
-                md += `### Ecosystem Summary\n\n`;
-                md += `* Flows Executed: **${report.summary.flowsExecuted}**\n`;
-                md += `* Total Steps: **${report.summary.totalSteps}**\n`;
-                md += `* Unique Nodes Activated: **${report.summary.uniqueNodesActivated}**\n`;
-                md += `* Connections Traversed: **${report.summary.connectionsTraversed}**\n\n`;
-
-                md += `### Most Active Nodes\n\n`;
-                md += `* **Most Used Node:** ${report.mostActiveNode.title} (${report.mostActiveNode.count} activations)\n\n`;
-                md += `| Rank | System Node | Activations |\n`;
-                md += `|---|---|---|\n`;
-                report.ranking.forEach((n, idx) => {
-                    md += `| ${idx + 1} | **${n.title}** | ${n.count} |\n`;
-                });
-
-                md += `\n### Least Active Nodes\n\n`;
-                report.leastActiveNodes.forEach(n => {
-                    md += `* **${n.title}**: ${n.count} activations\n`;
-                });
-
-                md += `\n### Critical Dependencies\n\n`;
-                report.criticalDeps.forEach(dep => {
-                    md += `* **${dep.title}** appeared in **${dep.percentage}%** of flows\n`;
-                });
-
-                md += `\n### Flow Complexity Analysis\n\n`;
-                md += `| Flow Scenario | Steps | Nodes | Complexity |\n`;
-                md += `|---|---|---|---|\n`;
-                report.flowComplexity.forEach(fc => {
-                    md += `| ${fc.flow} | ${fc.stepCount} | ${fc.nodeCount} | **${fc.complexity}** |\n`;
-                });
-
-                md += `\n### Trust Boundary Analysis\n\n`;
-                md += `* Secure Backend zone entered by **${report.trustBoundary.flowsCrossingBoundary} / ${report.summary.flowsExecuted}** flows.\n`;
-                md += `* Total Boundary Entries: **${report.trustBoundary.boundaryEntries}**\n`;
-                md += `* Total Boundary Exits: **${report.trustBoundary.boundaryExits}**\n\n`;
-
-                md += `### Database Impact Analysis\n\n`;
-                md += `* Total Database Operations: **${report.databaseImpact.dbTouchCount}** (Reads: **${report.databaseImpact.dbReads}**, Writes: **${report.databaseImpact.dbWrites}**)\n\n`;
-                md += `| Flow Scenario | Database Queries |\n`;
-                md += `|---|---|\n`;
-                report.databaseImpact.dbFlowActivity.forEach(act => {
-                    md += `| ${act.flow} | ${act.count} |\n`;
-                });
-
-                md += `\n### Analytics Coverage\n\n`;
-                md += `* **${report.analyticsCoverage.flowsFeedingAnalytics} of ${report.summary.flowsExecuted}** flows feed Analytics Engine.\n`;
-                if (report.analyticsCoverage.bypassingFlows.length > 0) {
-                    md += `* **Bypassed by:** ${report.analyticsCoverage.bypassingFlows.join(", ")}\n`;
-                }
-
-                md += `\n### Architecture Observations\n\n`;
-                report.observations.forEach(obs => {
-                    md += `* ${obs}\n`;
-                });
-
-                md += `\n### Architecture Risk Indicators\n\n`;
-                if (report.risks.length > 0) {
-                    report.risks.forEach(risk => {
-                        md += `* **[${risk.severity.toUpperCase()}] ${risk.title}**: ${risk.desc}\n`;
-                    });
-                } else {
-                    md += `* No risks detected.\n`;
-                }
-            }
-        }
-        
-        if (pack.history && pack.history.auditRuns && pack.history.auditRuns.length > 0) {
-            md += `\n\n---\n\n`;
-            md += `## 7. Local Architecture Audit History\n\n`;
-            md += `Total audit runs stored in local history: **${pack.history.auditRuns.length}**\n\n`;
-            md += `| Run ID | Timestamp | Version | Flows | Steps | Quality Score |\n`;
-            md += `|---|---|---|---|---|---|\n`;
-            pack.history.auditRuns.forEach(run => {
-                const dateStr = new Date(run.timestamp).toLocaleString();
-                const score = calculateArchitectureQualityScore(run.architectureHealthReport);
-                md += `| \`${run.id}\` | ${dateStr} | ${run.architectureVersion} | ${run.flowsExecuted.length} | ${run.architectureHealthReport.summary.totalSteps} | **${score}/100** |\n`;
-            });
-            
-            // Add timeline details
-            md += `\n\n### Architecture Evolution Timeline\n\n`;
-            pack.history.snapshots.forEach((snap, idx) => {
-                const dateStr = new Date(snap.timestamp).toLocaleString();
-                const healthRec = pack.history.healthHistory.find(h => h.id === "health_" + snap.id.split("_")[1]);
-                const score = healthRec ? calculateArchitectureQualityScore(pack.history.auditRuns.find(r => r.id === "run_" + snap.id.split("_")[1])?.architectureHealthReport) : "N/A";
-                md += `* **Audit #${idx + 1} (${dateStr}):** Nodes: **${snap.nodeCount}**, Connections: **${snap.connectionCount}**, SPOFs: **${healthRec ? healthRec.spofCount : "N/A"}**, Quality Score: **${score}/100**\n`;
-            });
-        }
-
-        return md;
-    }
-
-    function showToast(message) {
-        let toast = document.getElementById("toast-notification");
-        if (!toast) {
-            toast = document.createElement("div");
-            toast.id = "toast-notification";
-            toast.className = "toast-msg";
-            document.body.appendChild(toast);
-        }
-        toast.textContent = message;
-        toast.classList.remove("show");
-        // Force reflow
-        void toast.offsetWidth;
-        toast.classList.add("show");
-        setTimeout(() => {
-            toast.classList.remove("show");
-        }, 2200);
-    }
-
-    function copyToClipboard(text, successMessage) {
-        navigator.clipboard.writeText(text).then(() => {
-            showToast(successMessage || "Copied to clipboard!");
-        }).catch(err => {
-            // Fallback copy method
-            const textarea = document.createElement("textarea");
-            textarea.value = text;
-            textarea.style.position = "fixed";
-            document.body.appendChild(textarea);
-            textarea.select();
-            try {
-                document.execCommand("copy");
-                showToast(successMessage || "Copied to clipboard!");
-            } catch (e) {
-                showToast("Failed to copy context.");
-            }
-            document.body.removeChild(textarea);
-        });
-    }
-
-    function downloadFile(content, fileName, contentType) {
-        const a = document.createElement("a");
-        const file = new Blob([content], { type: contentType });
-        a.href = URL.createObjectURL(file);
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(a.href);
-    }
+    // Utility functions showToast, copyToClipboard, and downloadFile moved to js/utils.js
 
     function updateExecutionLogUI() {
         if (unifiedBatchLog) {
@@ -1337,53 +916,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
 
     // ─── AI CHAT REDESIGN IMPLEMENTATION ──────────────────────────
     
-    // Markdown-to-HTML helper for chat messages
-    function renderMarkdownToHtml(markdown) {
-        if (!markdown) return "";
-        let html = markdown;
-
-        // Escape raw HTML tags to prevent HTML injection/XSS issues
-        html = html
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-
-        // Code blocks
-        html = html.replace(/```([a-zA-Z0-9-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
-            return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
-        });
-        html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
-            return `<pre><code>${code.trim()}</code></pre>`;
-        });
-
-        // Inline code
-        html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-
-        // Headers
-        html = html.replace(/^### (.*?)$/gm, "<h3>$1</h3>");
-        html = html.replace(/^## (.*?)$/gm, "<h4>$1</h4>");
-        html = html.replace(/^# (.*?)$/gm, "<h5>$1</h5>");
-
-        // Bold
-        html = html.replace(/\*\*([\s\S]*?)\*\*/g, "<strong>$1</strong>");
-
-        // Unordered lists
-        html = html.replace(/^\s*[-*]\s+(.*?)$/gm, "<li>$1</li>");
-        // Wrap consecutive list items in <ul>
-        html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
-        html = html.replace(/<\/ul>\s*<ul>/g, "");
-
-        // Paragraphs
-        const blocks = html.split(/\n{2,}/);
-        html = blocks.map(block => {
-            if (block.startsWith("<pre>") || block.startsWith("<h3>") || block.startsWith("<h4>") || block.startsWith("<h5>") || block.startsWith("<ul>") || block.startsWith("<li>")) {
-                return block;
-            }
-            return `<p>${block.replace(/\n/g, "<br>")}</p>`;
-        }).join("");
-
-        return html;
-    }
+    // renderMarkdownToHtml moved to js/utils.js
 
     // Load settings from localStorage
     function loadAISettings() {
@@ -1700,9 +1233,9 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     const tabBtns = [tabBtnSimulator, tabBtnLog, tabBtnAi, tabBtnPack, tabBtnBatch, tabBtnHealth, tabBtnHistory, tabBtnTerminal];
     const panels = [panelSimulator, panelLog, panelAi, panelPack, panelBatch, panelHealth, panelHistory, panelTerminal];
 
-    let activeTabId = "ai"; // track active tab
+    let activeTabId = ""; // track active tab
 
-    function switchTab(targetId) {
+    export function switchTab(targetId) {
         if (!flowPanel) return;
 
         if (targetId === activeTabId && !flowPanel.classList.contains("collapsed")) {
@@ -1908,19 +1441,24 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
 
     if (btnAiSend) {
         btnAiSend.addEventListener("click", () => {
-            if (!aiChatInput) return;
-            const text = aiChatInput.value.trim();
-            if (!text) return;
-            
-            let finalPrompt = text;
-            if (aiInjectContext && aiInjectContext.checked) {
-                const mdContext = generateKnowledgePackMarkdown();
-                finalPrompt = `User question: ${text}\n\n=== CURRENT ARCHITECTURE SPECIFICATION ===\n${mdContext}`;
+            try {
+                if (!aiChatInput) return;
+                const text = aiChatInput.value.trim();
+                if (!text) return;
+                
+                let finalPrompt = text;
+                if (aiInjectContext && aiInjectContext.checked) {
+                    const mdContext = generateKnowledgePackMarkdown();
+                    finalPrompt = `User question: ${text}\n\n=== CURRENT ARCHITECTURE SPECIFICATION ===\n${mdContext}`;
+                }
+                
+                aiChatInput.value = "";
+                aiChatInput.style.height = "34px";
+                sendChatMessage(finalPrompt, text);
+            } catch (err) {
+                console.error("AI Send click error:", err);
+                appendMessage("error", `⚠️ UI Event Error: ${err.message}`);
             }
-            
-            aiChatInput.value = "";
-            aiChatInput.style.height = "34px";
-            sendChatMessage(finalPrompt, text);
         });
     }
 
@@ -1940,7 +1478,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     });
 
     // ─── Flow Checklist / Batch Run System ──────────────────────
-    let unifiedBatchLog = null;
+    export let unifiedBatchLog = null;
     let isBatchRunning = false;
     let batchQueue = [];
     let batchQueueIndex = 0;
@@ -2212,346 +1750,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         return md;
     }
 
-    function generateArchitectureHealthReport(batchLog) {
-        if (!batchLog || !batchLog.steps) return null;
-
-        const totalSteps = batchLog.steps.length;
-        const totalFlowsCount = batchLog.flowsSimulated.length;
-
-        // 1. Unique Nodes and Connections
-        const uniqueNodes = new Set();
-        batchLog.steps.forEach(s => {
-            const nodeObj = NODES.find(n => n.title === s.node || n.id === s.node);
-            if (nodeObj) uniqueNodes.add(nodeObj.title);
-            else uniqueNodes.add(s.node);
-        });
-
-        let connectionsTraversed = 0;
-        const stepsByFlow = {};
-        batchLog.steps.forEach(s => {
-            if (!stepsByFlow[s.flow]) stepsByFlow[s.flow] = [];
-            stepsByFlow[s.flow].push(s);
-        });
-        Object.values(stepsByFlow).forEach(steps => {
-            for (let i = 0; i < steps.length - 1; i++) {
-                connectionsTraversed++;
-            }
-        });
-
-        // 2. Node Counts / Rankings
-        const nodeCounts = {};
-        const nodeFlowPresence = {};
-        NODES.forEach(n => {
-            nodeCounts[n.id] = 0;
-            nodeFlowPresence[n.id] = new Set();
-        });
-
-        batchLog.steps.forEach(s => {
-            const nodeObj = NODES.find(n => n.title === s.node || n.id === s.node);
-            if (nodeObj) {
-                nodeCounts[nodeObj.id]++;
-                nodeFlowPresence[nodeObj.id].add(s.flow);
-            }
-        });
-
-        const ranking = NODES.map(n => ({
-            id: n.id,
-            title: n.title,
-            count: nodeCounts[n.id]
-        }))
-        .filter(item => item.count > 0)
-        .sort((a, b) => b.count - a.count);
-
-        const topNode = ranking[0] || { title: "N/A", count: 0 };
-        const mostActiveNode = {
-            title: topNode.title,
-            count: topNode.count
-        };
-
-        // 3. Least Active Nodes (count <= 2)
-        const leastActiveNodes = NODES.map(n => ({
-            title: n.title,
-            count: nodeCounts[n.id]
-        }))
-        .filter(item => item.count <= 2)
-        .sort((a, b) => a.count - b.count);
-
-        // 4. Critical Dependencies (presence >= 50% of flows)
-        const criticalDeps = [];
-        NODES.forEach(n => {
-            const presence = nodeFlowPresence[n.id].size;
-            const pct = totalFlowsCount > 0 ? Math.round((presence / totalFlowsCount) * 100) : 0;
-            if (pct >= 50) {
-                criticalDeps.push({
-                    title: n.title,
-                    percentage: pct
-                });
-            }
-        });
-        criticalDeps.sort((a, b) => b.percentage - a.percentage);
-
-        // 5. Complexity Analysis
-        const flowComplexity = [];
-        batchLog.flowsSimulated.forEach(flowName => {
-            const steps = batchLog.steps.filter(s => s.flow === flowName);
-            if (steps.length === 0) return;
-
-            const stepCount = steps.length;
-            const uniqueFlowNodes = new Set();
-            steps.forEach(s => {
-                const nodeObj = NODES.find(n => n.title === s.node || n.id === s.node);
-                if (nodeObj) uniqueFlowNodes.add(nodeObj.id);
-                else uniqueFlowNodes.add(s.node);
-            });
-            const nodeCount = uniqueFlowNodes.size;
-
-            const firstNodeObj = NODES.find(n => n.title === steps[0].node || n.id === steps[0].node);
-            const initiatingId = firstNodeObj ? firstNodeObj.id : steps[0].node;
-            const otherNodes = Array.from(uniqueFlowNodes).filter(n => n !== initiatingId);
-            const dependencyCount = otherNodes.length;
-
-            let hasRisk = false;
-            let hasFuture = false;
-            steps.forEach(s => {
-                const actionText = (s.action + " " + s.details).toLowerCase();
-                if (/risk|anomaly|threat|counterfeit/.test(actionText)) {
-                    hasRisk = true;
-                }
-                const nodeObj = NODES.find(n => n.title === s.node || n.id === s.node);
-                if (nodeObj && (nodeObj.id === "future" || nodeObj.category === "Future")) {
-                    hasFuture = true;
-                }
-            });
-
-            let complexity = "Simple";
-            if (hasFuture || (stepCount >= 5 && hasRisk)) {
-                complexity = "Complex";
-            } else if (stepCount >= 5 || nodeCount >= 4) {
-                complexity = "Moderate";
-            }
-
-            flowComplexity.push({
-                flow: flowName,
-                stepCount: stepCount,
-                nodeCount: nodeCount,
-                dependencyCount: dependencyCount,
-                complexity: complexity
-            });
-        });
-
-        // 6. Trust Boundary
-        const secureNodes = ["backend", "database", "analytics"];
-        let boundaryEntries = 0;
-        let boundaryExits = 0;
-        let flowsCrossingBoundary = 0;
-
-        Object.values(stepsByFlow).forEach(steps => {
-            let crossed = false;
-            for (let i = 0; i < steps.length; i++) {
-                const nodeObj = NODES.find(n => n.title === steps[i].node || n.id === steps[i].node);
-                const nodeId = nodeObj ? nodeObj.id : steps[i].node;
-                const isSecure = secureNodes.includes(nodeId);
-
-                if (isSecure) crossed = true;
-
-                if (i > 0) {
-                    const prevNodeObj = NODES.find(n => n.title === steps[i-1].node || n.id === steps[i-1].node);
-                    const prevNodeId = prevNodeObj ? prevNodeObj.id : steps[i-1].node;
-                    const prevSecure = secureNodes.includes(prevNodeId);
-
-                    if (!prevSecure && isSecure) boundaryEntries++;
-                    else if (prevSecure && !isSecure) boundaryExits++;
-                }
-            }
-            if (crossed) flowsCrossingBoundary++;
-        });
-
-        // 7. Database Impact
-        let dbReads = 0;
-        let dbWrites = 0;
-        let dbTouchCount = 0;
-        const dbFlowMap = {};
-        batchLog.flowsSimulated.forEach(f => {
-            dbFlowMap[f] = 0;
-        });
-
-        batchLog.steps.forEach(s => {
-            const nodeObj = NODES.find(n => n.title === s.node || n.id === s.node);
-            const nodeId = nodeObj ? nodeObj.id : s.node;
-
-            if (nodeId === "database") {
-                dbTouchCount++;
-                dbFlowMap[s.flow] = (dbFlowMap[s.flow] || 0) + 1;
-
-                const actionText = (s.action + " " + s.details).toLowerCase();
-                const isWrite = /write|save|update|create|persist|register|store|assign|record/.test(actionText);
-                if (isWrite) dbWrites++;
-                else dbReads++;
-            }
-        });
-
-        const dbFlowActivity = Object.entries(dbFlowMap).map(([flow, count]) => ({
-            flow: flow,
-            count: count
-        })).sort((a, b) => b.count - a.count);
-
-        // 8. Analytics Coverage
-        let flowsFeedingAnalytics = 0;
-        const bypassingFlows = [];
-
-        batchLog.flowsSimulated.forEach(flowName => {
-            const steps = batchLog.steps.filter(s => s.flow === flowName);
-            const hasAnalytics = steps.some(s => {
-                const nodeObj = NODES.find(n => n.title === s.node || n.id === s.node);
-                return nodeObj && nodeObj.id === "analytics";
-            });
-
-            if (hasAnalytics) flowsFeedingAnalytics++;
-            else bypassingFlows.push(flowName);
-        });
-
-        // 9. Metric-driven observations
-        const observations = [];
-        if (topActive && topActive.count > 0.20 * totalSteps) {
-            observations.push(`${topActive.title} is the primary orchestration hub, managing ${topActive.count} system activations.`);
-        }
-        const dbPresence = nodeFlowPresence["database"];
-        const dbPercentage = dbPresence ? Math.round((dbPresence.size / totalFlowsCount) * 100) : 0;
-        if (dbPercentage >= 80) {
-            observations.push(`Database is a critical platform dependency and potential scaling bottleneck, appearing in ${dbPercentage}% of workflows.`);
-        }
-        const analyticsPercentage = totalFlowsCount > 0 ? Math.round((flowsFeedingAnalytics / totalFlowsCount) * 100) : 0;
-        if (analyticsPercentage >= 50) {
-            observations.push(`Analytics Engine receives event telemetry from ${analyticsPercentage}% of ecosystem flows, ensuring good behavioral logging.`);
-        } else {
-            observations.push(`Analytics Engine receives telemetry from only ${analyticsPercentage}% of flows, leaving telemetry coverage gaps.`);
-        }
-        if (batchLog.flowsSimulated.includes("Consumer Verification")) {
-            observations.push("Consumer Verification is the primary user-facing scenario and critical business execution path.");
-        }
-        if (dbTouchCount > 0) {
-            observations.push("Product Identity Registry functions logically as a centralized database data model rather than a runtime service.");
-        }
-
-        // 10. Warning Risk Badges
-        const risks = [];
-        NODES.forEach(n => {
-            const presence = nodeFlowPresence[n.id] ? nodeFlowPresence[n.id].size : 0;
-            if (presence === totalFlowsCount && totalFlowsCount > 1 && (n.id === "backend" || n.id === "database")) {
-                risks.push({
-                    title: "Single Point of Failure",
-                    severity: "critical",
-                    desc: `${n.title} is activated in 100% of flows. If this node fails, the entire verification infrastructure will go down.`
-                });
-            }
-        });
-
-        NODES.forEach(n => {
-            const count = nodeCounts[n.id] || 0;
-            if (totalSteps > 0 && (count / totalSteps) > 0.30) {
-                risks.push({
-                    title: "Overloaded Node",
-                    severity: "critical",
-                    desc: `${n.title} processes ${count} activations (${Math.round(count / totalSteps * 100)}% of total steps), indicating potential scalability bottlenecks.`
-                });
-            }
-        });
-
-        NODES.forEach(n => {
-            const count = nodeCounts[n.id] || 0;
-            if (count === 0) {
-                risks.push({
-                    title: "Unused Component",
-                    severity: "warning",
-                    desc: `${n.title} was not activated during any flow execution in this batch simulation.`
-                });
-            }
-        });
-
-        const traversedConns = new Set();
-        Object.values(stepsByFlow).forEach(steps => {
-            for (let i = 0; i < steps.length - 1; i++) {
-                const fromObj = NODES.find(n => n.title === steps[i].node || n.id === steps[i].node);
-                const toObj = NODES.find(n => n.title === steps[i+1].node || n.id === steps[i+1].node);
-                if (fromObj && toObj) {
-                    traversedConns.add(`${fromObj.id}->${toObj.id}`);
-                }
-            }
-        });
-
-        CONNECTIONS.forEach(([from, to, label, type]) => {
-            if (type !== "future") {
-                const key = `${from}->${to}`;
-                if (!traversedConns.has(key)) {
-                    const fromNode = NODES.find(n => n.id === from);
-                    const toNode = NODES.find(n => n.id === to);
-                    if (fromNode && toNode) {
-                        risks.push({
-                            title: "Unused Connection",
-                            severity: "warning",
-                            desc: `Connection "${label}" from ${fromNode.title} to ${toNode.title} was never traversed.`
-                        });
-                    }
-                }
-            }
-        });
-
-        NODES.forEach(n => {
-            // Count unique interactors
-            const interactors = new Set();
-            Object.values(stepsByFlow).forEach(steps => {
-                for (let i = 0; i < steps.length; i++) {
-                    const nodeObj = NODES.find(node => node.title === steps[i].node || node.id === steps[i].node);
-                    if (nodeObj && nodeObj.id === n.id) {
-                        if (i > 0) {
-                            const prevObj = NODES.find(node => node.title === steps[i-1].node || node.id === steps[i-1].node);
-                            if (prevObj && prevObj.id !== n.id) interactors.add(prevObj.id);
-                        }
-                        if (i < steps.length - 1) {
-                            const nextObj = NODES.find(node => node.title === steps[i+1].node || node.id === steps[i+1].node);
-                            if (nextObj && nextObj.id !== n.id) interactors.add(nextObj.id);
-                        }
-                    }
-                }
-            });
-            if (interactors.size >= 4) {
-                risks.push({
-                    title: "High Coupling",
-                    severity: "warning",
-                    desc: `${n.title} is coupled directly to ${interactors.size} other nodes, complicating standalone modification.`
-                });
-            }
-        });
-
-        if (dbTouchCount > 0 && (dbTouchCount / totalSteps) >= 0.25) {
-            risks.push({
-                title: "Excessive Database Dependence",
-                severity: "warning",
-                desc: `Database is engaged in ${dbTouchCount} steps (${Math.round(dbTouchCount / totalSteps * 100)}% of simulation). Excessive state reliance can lead to data locks.`
-            });
-        }
-
-        return {
-            summary: {
-                flowsExecuted: totalFlowsCount,
-                totalSteps: totalSteps,
-                uniqueNodesActivated: uniqueNodesActivated,
-                connectionsTraversed: connectionsTraversed,
-                timestamp: batchLog.timestamp,
-                version: batchLog.version || "1.0"
-            },
-            mostActiveNode,
-            ranking,
-            leastActiveNodes,
-            criticalDeps,
-            flowComplexity,
-            trustBoundary,
-            databaseImpact,
-            analyticsCoverage,
-            observations,
-            risks
-        };
-    }
+    // generateArchitectureHealthReport moved to js/reports/health-engine.js
 
     function updateArchitectureHealthUI() {
         if (!healthReportContent) return;
@@ -3009,7 +2208,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
 
     // ─── Architecture History & IndexedDB ───────────────────────
     let db = null;
-    let localHistoryCache = { auditRuns: [], architectureSnapshots: [], healthHistory: [] };
+    export let localHistoryCache = { auditRuns: [], architectureSnapshots: [], healthHistory: [] };
     let selectedRunsForComparison = [];
 
     function initDB() {
@@ -3201,48 +2400,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         });
     }
 
-    function calculateArchitectureQualityScore(report) {
-        if (!report) return 100;
-        let score = 100;
-
-        const unusedComponents = report.leastActiveNodes.filter(n => n.count === 0);
-        score -= unusedComponents.length * 5;
-
-        const unusedConnections = report.risks.filter(r => r.title === "Unused Connection");
-        score -= unusedConnections.length * 3;
-
-        const spofs = report.risks.filter(r => r.title === "Single Point of Failure");
-        score -= spofs.length * 15;
-
-        const highCoupled = report.risks.filter(r => r.title === "High Coupling");
-        score -= highCoupled.length * 8;
-
-        const excessiveDb = report.risks.some(r => r.title === "Excessive Database Dependence");
-        if (excessiveDb) {
-            score -= 10;
-        }
-
-        const analyticsPct = report.summary.flowsExecuted > 0 ? (report.analyticsCoverage.flowsFeedingAnalytics / report.summary.flowsExecuted) : 0;
-        score += Math.round(analyticsPct * 15);
-
-        const topNodePct = report.summary.totalSteps > 0 ? (report.mostActiveNode.count / report.summary.totalSteps) : 0;
-        if (topNodePct < 0.30) {
-            score += 10;
-        }
-
-        const simpleOrModerateCount = report.flowComplexity.filter(f => f.complexity === "Simple" || f.complexity === "Moderate").length;
-        const complexityRatio = report.summary.flowsExecuted > 0 ? (simpleOrModerateCount / report.summary.flowsExecuted) : 0;
-        if (complexityRatio >= 0.50) {
-            score += 10;
-        }
-
-        return Math.max(0, Math.min(100, score));
-    }
-
-    function calculateDatabaseDependencyScore(report) {
-        if (!report || !report.summary || report.summary.totalSteps === 0) return 0;
-        return Math.round((report.databaseImpact.dbTouchCount / report.summary.totalSteps) * 100);
-    }
+    // calculateArchitectureQualityScore and calculateDatabaseDependencyScore moved to js/metrics.js
 
     function updateArchitectureHistoryUI() {
         if (!historyReportContent) return;
@@ -3611,7 +2769,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     }
 
     // ─── PROJECT SYSTEM ──────────────────────────────────────────
-    const DEFAULT_PROJECT_ID = "trace-sample";
+    export const DEFAULT_PROJECT_ID = "trace-sample";
 
     const SKELETON_TEMPLATE = {
         nodes: [
@@ -3666,7 +2824,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         ]
     };
 
-    function getCustomProjects() {
+    export function getCustomProjects() {
         try {
             const data = localStorage.getItem("archbench_projects");
             return data ? JSON.parse(data) : [];
@@ -3676,7 +2834,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         }
     }
 
-    function saveCustomProjects(projects) {
+    export function saveCustomProjects(projects) {
         try {
             localStorage.setItem("archbench_projects", JSON.stringify(projects));
         } catch (e) {
@@ -3687,354 +2845,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
 
     // ─── Markdown Parser & Generator (Sprint 2) ──────────────────
 
-    function parseMarkdownToProject(md) {
-        const lines = md.split(/\r?\n/);
-        const projectData = {
-            title: "Untitled Project",
-            version: "1.0",
-            description: "",
-            nodes: [],
-            connections: [],
-            flows: [],
-            layers: null
-        };
-
-        let currentSection = ""; // "metadata", "description", "layers", "trust_boundary", "nodes", "connections", "flows"
-        let currentNode = null;
-        let currentFlow = null;
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line === "") continue;
-
-            // Project title header
-            if (line.startsWith("# ") && currentSection === "") {
-                projectData.title = line.substring(2).trim();
-                currentSection = "metadata";
-                continue;
-            }
-
-            // Subsections headers
-            if (line.startsWith("## ")) {
-                const secName = line.substring(3).trim().toLowerCase();
-                if (secName.includes("description")) {
-                    currentSection = "description";
-                } else if (secName.includes("layer")) {
-                    currentSection = "layers";
-                    projectData.layers = [];
-                } else if (secName.includes("boundary")) {
-                    currentSection = "trust_boundary";
-                    projectData.trustBoundary = { x: 1000, y: 670, w: 1120, h: 950, label: "Trust Boundary", note: "" };
-                } else if (secName.includes("node") || secName.includes("system")) {
-                    currentSection = "nodes";
-                } else if (secName.includes("connection")) {
-                    currentSection = "connections";
-                } else if (secName.includes("flow")) {
-                    currentSection = "flows";
-                } else {
-                    currentSection = "";
-                }
-                continue;
-            }
-
-            // Parser logic per section
-            if (currentSection === "description") {
-                if (projectData.description) {
-                    projectData.description += "\n" + line;
-                } else {
-                    projectData.description = line;
-                }
-                continue;
-            }
-
-            if (currentSection === "metadata") {
-                if (line.toLowerCase().startsWith("version:")) {
-                    projectData.version = line.split(":")[1].trim();
-                }
-                continue;
-            }
-
-            if (currentSection === "layers") {
-                // - **id**: label (y: 150, h: 420)
-                const match = line.match(/^-\s*\*\*([^*]+)\*\*:\s*([^(]+)(?:\(\s*y:\s*(\d+),\s*h:\s*(\d+)\))?/);
-                if (match) {
-                    const id = match[1].trim();
-                    const label = match[2].trim();
-                    const y = match[3] ? parseInt(match[3]) : 150;
-                    const h = match[4] ? parseInt(match[4]) : 400;
-                    projectData.layers.push({ id, label, y, h, cls: id });
-                }
-                continue;
-            }
-
-            if (currentSection === "trust_boundary") {
-                const match = line.match(/^-\s*\*\*([^*]+)\*\*:\s*(.*)/);
-                if (match) {
-                    const key = match[1].trim().toLowerCase();
-                    const val = match[2].trim();
-                    if (key === "title") {
-                        projectData.trustBoundary.label = val;
-                    } else if (key === "note") {
-                        projectData.trustBoundary.note = val;
-                    } else if (key === "geometry") {
-                        const geo = {};
-                        val.split(",").forEach(part => {
-                            const kv = part.split(":");
-                            if (kv.length === 2) {
-                                geo[kv[0].trim().toLowerCase()] = parseInt(kv[1].trim());
-                            }
-                        });
-                        projectData.trustBoundary.x = geo.x || 1000;
-                        projectData.trustBoundary.y = geo.y || 670;
-                        projectData.trustBoundary.w = geo.w || 1120;
-                        projectData.trustBoundary.h = geo.h || 950;
-                    }
-                }
-                continue;
-            }
-
-            if (currentSection === "nodes") {
-                if (line.startsWith("### ")) {
-                    const match = line.substring(4).match(/^([^(]+)(?:\(([^)]+)\))?/);
-                    if (match) {
-                        const id = match[1].trim();
-                        const category = match[2] ? match[2].trim() : "Service";
-                        currentNode = {
-                            id,
-                            category,
-                            title: id,
-                            icon: "⚙️",
-                            color: "hsl(200,80%,58%)",
-                            x: 100, y: 100,
-                            desc: "",
-                            sections: []
-                        };
-                        projectData.nodes.push(currentNode);
-                    }
-                    continue;
-                }
-
-                if (currentNode) {
-                    const match = line.match(/^\*\s*\*\*([^*:]+):\*\*\s*(.*)/);
-                    if (match) {
-                        const key = match[1].trim().toLowerCase();
-                        const val = match[2].trim();
-                        if (key === "title") {
-                            currentNode.title = val;
-                        } else if (key === "icon") {
-                            currentNode.icon = val;
-                        } else if (key === "color") {
-                            currentNode.color = val;
-                        } else if (key === "x") {
-                            currentNode.x = parseInt(val);
-                        } else if (key === "y") {
-                            currentNode.y = parseInt(val);
-                        } else if (key === "description") {
-                            currentNode.desc = val;
-                        } else if (key === "flow") {
-                            currentNode.flow = val.split("→").map(s => s.trim());
-                        } else {
-                            currentNode.sections.push({
-                                label: match[1].trim(),
-                                items: val.split(",").map(s => s.trim())
-                            });
-                        }
-                    } else if (line.startsWith("> **[")) {
-                        const calloutMatch = line.match(/^>\s*\*\*\[([^\]]+)\]\*\*\s*(.*)/);
-                        if (calloutMatch) {
-                            currentNode.callout = {
-                                type: calloutMatch[1].trim(),
-                                text: calloutMatch[2].trim()
-                            };
-                        }
-                    }
-                }
-                continue;
-            }
-
-            if (currentSection === "connections") {
-                if (line.startsWith("|") && !line.includes("---|")) {
-                    const parts = line.split("|").map(s => s.trim()).filter(s => s !== "");
-                    if (parts[0].toLowerCase() === "from" || parts[0] === "---") continue;
-                    if (parts.length >= 2) {
-                        const from = parts[0];
-                        const to = parts[1];
-                        const label = parts[2] || "";
-                        const type = parts[3] || "request";
-                        projectData.connections.push([from, to, label, type]);
-                    }
-                }
-                continue;
-            }
-
-            if (currentSection === "flows") {
-                if (line.startsWith("### ")) {
-                    const match = line.substring(4).match(/^([^(]+)(?:\(([^)]+)\))?/);
-                    if (match) {
-                        const id = match[1].trim();
-                        const title = match[2] ? match[2].trim() : id;
-                        currentFlow = {
-                            id,
-                            title,
-                            subtitle: "",
-                            color: "hsl(210,85%,62%)",
-                            steps: []
-                        };
-                        projectData.flows.push(currentFlow);
-                    }
-                    continue;
-                }
-
-                if (currentFlow) {
-                    if (line.startsWith("*") && !line.startsWith("* **")) {
-                        currentFlow.subtitle = line.replace(/^\*\s*/, "").replace(/\*$/, "").trim();
-                    } else if (line.startsWith("- **Color:**")) {
-                        currentFlow.color = line.split(":")[1].replace(/\*/g, "").trim();
-                    } else {
-                        const stepMatch = line.match(/^\d+\.\s*\*\*([^*]+)\*\*\s*\[([^\]]+)\]:\s*(.*)/);
-                        if (stepMatch) {
-                            const node = stepMatch[1].trim();
-                            const label = stepMatch[2].trim();
-                            const detail = stepMatch[3].trim();
-                            currentFlow.steps.push({
-                                node,
-                                label,
-                                detail,
-                                data: ""
-                            });
-                        } else if (line.startsWith("* Data:") || line.startsWith("  * Data:")) {
-                            const dataVal = line.split("Data:")[1].trim();
-                            if (currentFlow.steps.length > 0) {
-                                currentFlow.steps[currentFlow.steps.length - 1].data = dataVal;
-                            }
-                        }
-                    }
-                }
-                continue;
-            }
-        }
-
-        return projectData;
-    }
-
-    function exportProjectToMarkdown(proj) {
-        let md = `# ${proj.title || "Untitled Project"}\n`;
-        md += `Version: ${proj.version || "1.0"}\n\n`;
-        if (proj.description) {
-            md += `## Description\n${proj.description}\n\n`;
-        }
-
-        if (proj.layers && proj.layers.length > 0) {
-            md += `## Layers\n`;
-            proj.layers.forEach(l => {
-                md += `- **${l.id}**: ${l.label} (y: ${l.y}, h: ${l.h})\n`;
-            });
-            md += `\n`;
-        }
-
-        if (proj.trustBoundary) {
-            md += `## Trust Boundary\n`;
-            md += `- **Title**: ${proj.trustBoundary.label || "Trust Boundary"}\n`;
-            if (proj.trustBoundary.note) md += `- **Note**: ${proj.trustBoundary.note}\n`;
-            md += `- **Geometry**: x: ${proj.trustBoundary.x}, y: ${proj.trustBoundary.y}, w: ${proj.trustBoundary.w}, h: ${proj.trustBoundary.h}\n\n`;
-        }
-
-        md += `## Nodes\n\n`;
-        (proj.nodes || []).forEach(n => {
-            md += `### ${n.id} (${n.category})\n`;
-            md += `* **Title:** ${n.title}\n`;
-            md += `* **Icon:** ${n.icon || "⚙️"}\n`;
-            md += `* **Color:** ${n.color || "hsl(200,80%,58%)"}\n`;
-            md += `* **x:** ${n.x}\n`;
-            md += `* **y:** ${n.y}\n`;
-            if (n.desc) md += `* **Description:** ${n.desc}\n`;
-            if (n.flow && n.flow.length > 0) {
-                md += `* **Flow:** ${n.flow.join(" → ")}\n`;
-            }
-            (n.sections || []).forEach(s => {
-                md += `* **${s.label}:** ${(s.items || []).join(", ")}\n`;
-            });
-            if (n.callout) {
-                md += `> **[${n.callout.type}]** ${n.callout.text}\n`;
-            }
-            md += `\n`;
-        });
-
-        if (proj.connections && proj.connections.length > 0) {
-            md += `## Connections\n`;
-            md += `| From | To | Interaction | Type |\n`;
-            md += `|---|---|---|---|\n`;
-            proj.connections.forEach(c => {
-                md += `| ${c[0]} | ${c[1]} | ${c[2] || ""} | ${c[3] || "request"} |\n`;
-            });
-            md += `\n`;
-        }
-
-        if (proj.flows && proj.flows.length > 0) {
-            md += `## Flows\n\n`;
-            proj.flows.forEach(f => {
-                md += `### ${f.id} (${f.title})\n`;
-                if (f.subtitle) md += `*${f.subtitle}*\n`;
-                if (f.color) md += `- **Color:** ${f.color}\n`;
-                md += `\n`;
-                (f.steps || []).forEach((s, idx) => {
-                    md += `${idx + 1}. **${s.node}** [${s.label}]: ${s.detail || ""}\n`;
-                    if (s.data) md += `   * Data: ${s.data}\n`;
-                });
-                md += `\n`;
-            });
-        }
-
-        return md;
-    }
-
-    function validateProjectData(spec) {
-        if (!spec.nodes || !Array.isArray(spec.nodes)) {
-            throw new Error("Missing 'nodes' array.");
-        }
-        if (!spec.connections || !Array.isArray(spec.connections)) {
-            throw new Error("Missing 'connections' array.");
-        }
-        if (!spec.flows || !Array.isArray(spec.flows)) {
-            throw new Error("Missing 'flows' array.");
-        }
-        
-        const nodeIds = new Set(spec.nodes.map(n => n.id));
-        
-        spec.nodes.forEach((n, idx) => {
-            if (!n.id) throw new Error(`Node at index ${idx} is missing an 'id'.`);
-            if (!n.category) throw new Error(`Node '${n.id}' is missing a 'category'.`);
-            if (n.x === undefined || isNaN(n.x)) n.x = 100 + idx * 100;
-            if (n.y === undefined || isNaN(n.y)) n.y = 100;
-        });
-        
-        spec.connections.forEach((c, idx) => {
-            if (!Array.isArray(c) || c.length < 2) {
-                throw new Error(`Connection at index ${idx} is invalid. Format: [from, to, label, type]`);
-            }
-            if (!nodeIds.has(c[0])) {
-                throw new Error(`Connection at index ${idx} references non-existent node '${c[0]}'.`);
-            }
-            if (!nodeIds.has(c[1])) {
-                throw new Error(`Connection at index ${idx} references non-existent node '${c[1]}'.`);
-            }
-        });
-        
-        spec.flows.forEach((f, idx) => {
-            if (!f.id) throw new Error(`Flow at index ${idx} is missing an 'id'.`);
-            if (!f.steps || !Array.isArray(f.steps)) {
-                throw new Error(`Flow '${f.id}' is missing a 'steps' array.`);
-            }
-            f.steps.forEach((s, sIdx) => {
-                if (!s.node) throw new Error(`Step ${sIdx + 1} in flow '${f.id}' is missing a target 'node'.`);
-                if (!nodeIds.has(s.node)) {
-                    throw new Error(`Step ${sIdx + 1} in flow '${f.id}' references non-existent node '${s.node}'.`);
-                }
-            });
-        });
-        
-        return true;
-    }
+    // parseMarkdownToProject, exportProjectToMarkdown, and validateProjectData moved to js/parser.js
 
     function getAvailableProjects() {
         const custom = getCustomProjects();
@@ -4054,7 +2865,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         return list;
     }
 
-    function loadProject(projectToLoad) {
+    export function loadProject(projectToLoad) {
         // Stop any active simulations
         stopAutoPlay();
         exitFlow();
@@ -5052,373 +3863,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     }
 
 
-    // ─── Live Watch Change Detection (Sprint 6) ──────────────────
-    let isLiveWatching = false;
-    let liveWatchInterval = null;
-    let lastWatchText = "";
-    let watchFileHandle = null;
-
-    const btnLiveWatch = document.getElementById("btn-live-watch");
-    const liveWatchText = document.getElementById("live-watch-text");
-
-    async function toggleLiveWatch() {
-        if (isLiveWatching) {
-            stopLiveWatch();
-        } else {
-            await startLiveWatch();
-        }
-    }
-
-    async function startLiveWatch() {
-        if (window.showOpenFilePicker) {
-            try {
-                const [handle] = await window.showOpenFilePicker({
-                    types: [{
-                        description: 'ArcBench Markdown Spec (*.md)',
-                        accept: { 'text/markdown': ['.md'] }
-                    }],
-                    excludeAcceptAllOption: true
-                });
-                watchFileHandle = handle;
-                const file = await handle.getFile();
-                lastWatchText = await file.text();
-                showToast(`👁️ Watching local file: ${file.name}`);
-            } catch (err) {
-                console.warn("File picker cancelled or failed, falling back to server polling:", err);
-                watchFileHandle = null;
-                showToast("👁️ Watching server endpoint: architecture.md");
-            }
-        } else {
-            showToast("👁️ Watching server endpoint: architecture.md");
-        }
-
-        isLiveWatching = true;
-        if (btnLiveWatch) btnLiveWatch.classList.add("active");
-        if (liveWatchText) liveWatchText.textContent = "Watching...";
-
-        liveWatchInterval = setInterval(async () => {
-            if (!isLiveWatching) return;
-            try {
-                let currentText = "";
-                if (watchFileHandle) {
-                    const file = await watchFileHandle.getFile();
-                    currentText = await file.text();
-                } else {
-                    let fetchUrl = "architecture.md";
-                    if (currentProject && currentProject.id === DEFAULT_PROJECT_ID) {
-                        fetchUrl = "samples/trace.md";
-                    }
-                    const resp = await fetch(fetchUrl, { cache: "no-store" });
-                    if (resp.ok) {
-                        currentText = await resp.text();
-                    } else {
-                        throw new Error(`Failed HTTP poll: ${resp.status}`);
-                    }
-                }
-
-                if (currentText && currentText !== lastWatchText) {
-                    lastWatchText = currentText;
-                    reloadProjectFromWatch(currentText);
-                }
-            } catch (err) {
-                console.error("Live Watch error:", err);
-            }
-        }, 1200);
-    }
-
-    function stopLiveWatch() {
-        isLiveWatching = false;
-        if (liveWatchInterval) {
-            clearInterval(liveWatchInterval);
-            liveWatchInterval = null;
-        }
-        watchFileHandle = null;
-        if (btnLiveWatch) btnLiveWatch.classList.remove("active");
-        if (liveWatchText) liveWatchText.textContent = "Live Watch";
-        showToast("Live Watch disabled.");
-    }
-
-    function reloadProjectFromWatch(specText) {
-        try {
-            const parsed = parseMarkdownToProject(specText);
-            validateProjectData(parsed);
-
-            if (currentProject) {
-                parsed.id = currentProject.id;
-                
-                if (currentProject.id !== DEFAULT_PROJECT_ID) {
-                    const custom = getCustomProjects();
-                    const idx = custom.findIndex(p => p.id === currentProject.id);
-                    if (idx !== -1) {
-                        custom[idx] = parsed;
-                        saveCustomProjects(custom);
-                    }
-                }
-            }
-
-            loadProject(parsed);
-            showToast("⚡ Spec file update detected! Architecture hot-reloaded.");
-        } catch (err) {
-            console.error("Auto-reload parse error:", err);
-            showToast("⚠️ Spec update detected, but validation failed: " + err.message);
-        }
-    }
-
-    if (btnLiveWatch) {
-        btnLiveWatch.addEventListener("click", toggleLiveWatch);
-    }
-
-
-    // ─── Project Agent Terminal Command Shell ────────────────────
-    let termInstance = null;
-    let termInputBuffer = "";
-    let termHistory = [];
-    let termHistoryIndex = -1;
-
-    function initTerminalOnce() {
-        if (termInstance) {
-            setTimeout(() => termInstance.focus(), 50);
-            return;
-        }
-        if (!terminalContainer) return;
-        if (!window.Terminal) {
-            terminalContainer.innerHTML = `<span style="color: hsl(0, 72%, 62%); font-size: 11px;">Error: xterm.js library could not be loaded from CDN.</span>`;
-            return;
-        }
-
-        termInstance = new window.Terminal({
-            cursorBlink: true,
-            theme: {
-                background: '#07080d',
-                foreground: '#e2e4e9',
-                cursor: '#b482ff',
-                selection: 'rgba(180, 130, 255, 0.3)'
-            },
-            fontSize: 10,
-            fontFamily: 'monospace',
-            rows: 11,
-            convertEol: true
-        });
-
-        termInstance.open(terminalContainer);
-        termInstance.writeln("\x1b[1;35mArchBench Project Agent Terminal v0.1\x1b[0m");
-        termInstance.writeln("Type \x1b[32m'help'\x1b[0m to list available workspace commands.\n");
-        
-        writePrompt();
-
-        termInstance.onKey(e => {
-            const char = e.key;
-            const code = e.domEvent.keyCode;
-
-            if (code === 13) { 
-                termInstance.write("\r\n");
-                const cmd = termInputBuffer.trim();
-                if (cmd) {
-                    termHistory.push(termInputBuffer);
-                    termHistoryIndex = termHistory.length;
-                    processTerminalCommand(cmd);
-                } else {
-                    writePrompt();
-                }
-                termInputBuffer = "";
-            } else if (code === 8) { 
-                if (termInputBuffer.length > 0) {
-                    termInputBuffer = termInputBuffer.slice(0, -1);
-                    termInstance.write("\b \b");
-                }
-            } else if (code === 38) { 
-                if (termHistory.length > 0 && termHistoryIndex > 0) {
-                    termHistoryIndex--;
-                    clearCurrentTermLine();
-                    termInputBuffer = termHistory[termHistoryIndex];
-                    termInstance.write(termInputBuffer);
-                }
-            } else if (code === 40) { 
-                if (termHistory.length > 0 && termHistoryIndex < termHistory.length - 1) {
-                    termHistoryIndex++;
-                    clearCurrentTermLine();
-                    termInputBuffer = termHistory[termHistoryIndex];
-                    termInstance.write(termInputBuffer);
-                } else if (termHistoryIndex === termHistory.length - 1) {
-                    termHistoryIndex = termHistory.length;
-                    clearCurrentTermLine();
-                    termInputBuffer = "";
-                }
-            } else if (code >= 37 && code <= 40) {
-                // Ignore cursor arrow navigations
-            } else {
-                termInputBuffer += char;
-                termInstance.write(char);
-            }
-        });
-
-        setTimeout(() => termInstance.focus(), 50);
-    }
-
-    function writePrompt() {
-        const projName = currentProject ? currentProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "untitled";
-        termInstance.write(`\x1b[1;36marchbench:${projName}$ \x1b[0m`);
-    }
-
-    function clearCurrentTermLine() {
-        const projName = currentProject ? currentProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "untitled";
-        const promptLen = `archbench:${projName}$ `.length;
-        termInstance.write("\r" + " ".repeat(promptLen + termInputBuffer.length + 10) + "\r");
-        writePrompt();
-    }
-
-    function processTerminalCommand(line) {
-        const args = line.split(/\s+/);
-        const cmd = args[0].toLowerCase();
-
-        if (cmd === 'help') {
-            termInstance.writeln("\x1b[1mAvailable Workspace Commands:\x1b[0m");
-            termInstance.writeln("  \x1b[32mhelp\x1b[0m                  List available commands.");
-            termInstance.writeln("  \x1b[32march parse\x1b[0m            Validate and parse the active project spec.");
-            termInstance.writeln("  \x1b[32march simulate [flow]\x1b[0m  Simulate a sequence flow by ID.");
-            termInstance.writeln("  \x1b[32march audit\x1b[0m             Run structural rules and health audits.");
-            termInstance.writeln("  \x1b[32march compare\x1b[0m           Compare current project against local snapshots.");
-            termInstance.writeln("  \x1b[32march export\x1b[0m            Download active specification as Markdown.");
-            termInstance.writeln("  \x1b[32mclear\x1b[0m                 Clear the console.");
-            termInstance.writeln("");
-            writePrompt();
-            return;
-        }
-
-        if (cmd === 'clear') {
-            termInstance.clear();
-            writePrompt();
-            return;
-        }
-
-        if (cmd === 'arch') {
-            const sub = args[1] ? args[1].toLowerCase() : "";
-            
-            if (sub === 'parse') {
-                termInstance.writeln(`\x1b[35m[Parsing Workspace Project: ${currentProject ? currentProject.title : "Untitled"}]\x1b[0m`);
-                termInstance.writeln(`- Specification Version: ${currentProject ? currentProject.version : "1.0"}`);
-                termInstance.writeln(`- Components (Nodes): ${NODES.length} loaded`);
-                termInstance.writeln(`- Dependencies (Connections): ${CONNECTIONS.length} loaded`);
-                termInstance.writeln(`- Workflows (Flows): ${FLOWS.length} loaded`);
-                
-                termInstance.writeln("\n\x1b[1mActive Nodes list:\x1b[0m");
-                NODES.forEach(n => {
-                    termInstance.writeln(`  * \x1b[36m${n.id}\x1b[0m [${n.category}]: ${n.title} (x:${n.x}, y:${n.y})`);
-                });
-                termInstance.writeln("");
-                writePrompt();
-                return;
-            }
-
-            if (sub === 'simulate') {
-                const targetFlowId = args[2];
-                if (!targetFlowId) {
-                    termInstance.writeln("Error: Missing target flow ID parameter.");
-                    termInstance.writeln("Available Flows:");
-                    FLOWS.forEach(f => {
-                        termInstance.writeln(`  - \x1b[32m${f.id}\x1b[0m: ${f.title}`);
-                    });
-                    termInstance.writeln("");
-                    writePrompt();
-                    return;
-                }
-
-                const flow = FLOWS.find(f => f.id === targetFlowId || f.id.toLowerCase() === targetFlowId.toLowerCase());
-                if (!flow) {
-                    termInstance.writeln(`\x1b[31mError: Flow ID '${targetFlowId}' not found.\x1b[0m`);
-                    writePrompt();
-                    return;
-                }
-
-                termInstance.writeln(`\x1b[35mStarting Simulation playback for flow: ${flow.title} (${flow.id})\x1b[0m`);
-                
-                switchTab("simulator");
-                
-                const flowButton = document.querySelector(`.flow-btn[data-flow-id="${flow.id}"]`);
-                if (flowButton) {
-                    flowButton.click();
-                    termInstance.writeln("🚀 Playback window triggered successfully.");
-                } else {
-                    termInstance.writeln("⚠️ Warning: Visual controller button not found, but simulation model loaded.");
-                }
-                
-                writePrompt();
-                return;
-            }
-
-            if (sub === 'audit') {
-                termInstance.writeln("\x1b[35m[Running Workspace Audit...]\x1b[0m");
-                
-                let couplingAnomalies = 0;
-                CONNECTIONS.forEach(conn => {
-                    const fromNode = NODES.find(n => n.id === conn[0]);
-                    const toNode = NODES.find(n => n.id === conn[1]);
-                    if (fromNode && toNode) {
-                        if (fromNode.category === 'Entry Point' && toNode.category === 'Infrastructure') {
-                            termInstance.writeln(`  \x1b[33m⚠️ WARNING: Direct coupling found from Entry Point '${fromNode.id}' to Infrastructure Store '${toNode.id}'!\x1b[0m`);
-                            couplingAnomalies++;
-                        }
-                    }
-                });
-
-                if (unifiedBatchLog) {
-                    const health = generateArchitectureHealthReport(unifiedBatchLog);
-                    if (health) {
-                        termInstance.writeln(`- Quality Health Score: \x1b[32m${calculateArchitectureQualityScore(health)}/100\x1b[0m`);
-                        termInstance.writeln(`- SPOF (Single Point of Failure) Count: ${health.summary.spofCount}`);
-                        termInstance.writeln(`- Boundary Crossings Count: ${health.summary.boundaryCrossings}`);
-                    }
-                } else {
-                    termInstance.writeln(`- Coupling anomalies detected: ${couplingAnomalies}`);
-                    termInstance.writeln("\x1b[90m(Run flow batch checklists for complete health and SPOF analytics)\x1b[0m");
-                }
-                termInstance.writeln("");
-                writePrompt();
-                return;
-            }
-
-            if (sub === 'compare') {
-                termInstance.writeln("\x1b[35m[Querying Local IndexedDB Snapshots History...]\x1b[0m");
-                
-                const snaps = localHistoryCache.architectureSnapshots;
-                if (!snaps || snaps.length === 0) {
-                    termInstance.writeln("No snapshots found in local history database.");
-                } else {
-                    termInstance.writeln(`Found ${snaps.length} local snapshots:`);
-                    snaps.forEach((snap, idx) => {
-                        const dateStr = new Date(snap.timestamp).toLocaleString();
-                        termInstance.writeln(`  [#${idx + 1}] Version: ${snap.architectureVersion} - Nodes: ${snap.nodeCount}, Links: ${snap.connectionCount} (${dateStr})`);
-                    });
-                }
-                termInstance.writeln("");
-                writePrompt();
-                return;
-            }
-
-            if (sub === 'export') {
-                termInstance.writeln("Generating Markdown specification file download...");
-                
-                const exportBtn = document.getElementById("dropdown-btn-export");
-                if (exportBtn) {
-                    exportBtn.click();
-                    termInstance.writeln("✅ Specification file download triggered.");
-                } else {
-                    termInstance.writeln("❌ Error: Export controller button not found.");
-                }
-                termInstance.writeln("");
-                writePrompt();
-                return;
-            }
-        }
-
-        termInstance.writeln(`\x1b[31mCommand not recognized: '${line}'. Type 'help' for options.\x1b[0m`);
-        termInstance.writeln("");
-        writePrompt();
-    }
-
-    if (btnLiveWatch) {
-        btnLiveWatch.addEventListener("click", toggleLiveWatch);
-    }
+    // Live watch detection and Terminal command shell logic moved to js/live-watch.js and js/terminal.js
 
 
     // ─── Init ───────────────────────────────────────────────────
@@ -5439,5 +3884,3 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     }, 6000);
 
     applyTransform();
-
-})();
