@@ -1179,4 +1179,91 @@ html, body {
     gap: 10px;
 }
 
+/* Onboarding Wizard Styling */
+.wizard-card {
+    max-width: 540px;
+}
+
+.wizard-step {
+    display: none;
+    padding: 20px;
+}
+
+.wizard-step.active {
+    display: block;
+}
+
+.wizard-options {
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+}
+
+.wizard-opt-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px 14px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    font-family: inherit;
+}
+
+.wizard-opt-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: hsl(280, 85%, 70%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(180, 130, 255, 0.12);
+}
+
+.wizard-opt-icon {
+    font-size: 28px;
+    margin-bottom: 10px;
+}
+
+.wizard-opt-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.wizard-opt-desc {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.wizard-dropzone {
+    border: 2px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 24px 16px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.wizard-dropzone.dragover {
+    border-color: hsl(200, 85%, 75%);
+    background: rgba(200, 85, 75, 0.04);
+}
+
+.wizard-nav {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 14px;
+}
+
+
 

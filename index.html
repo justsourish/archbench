@@ -267,11 +267,11 @@
     <!-- Hidden file input for import -->
     <input type="file" id="project-file-input" accept=".json,.md" style="display: none;">
 
-    <!-- Project Settings & Management Modal -->
+    <!-- Project Settings & Management Modal (Advanced Architecture Editor) -->
     <div class="modal-overlay" id="project-modal">
         <div class="modal-card">
             <div class="modal-header">
-                <span class="modal-title" id="project-modal-title">Create New Project</span>
+                <span class="modal-title" id="project-modal-title">Advanced Architecture Editor</span>
                 <button class="modal-close" id="project-modal-close" title="Close">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
@@ -286,7 +286,16 @@
                     <input class="form-input" type="text" id="project-version-input" placeholder="e.g. 1.0.0" value="1.0">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="project-json-input">Architecture Specification (Markdown)</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label class="form-label" style="margin-bottom: 0;" for="project-json-input">Architecture Specification (Markdown)</label>
+                        <div class="spec-kit-links" style="display: flex; gap: 8px; font-size: 10px;">
+                            <a href="#" id="link-spec-template" style="color: hsl(280, 85%, 75%); text-decoration: none; font-weight: 600;" onclick="event.preventDefault();">📋 Load Template</a>
+                            <span style="color: rgba(255,255,255,0.15)">|</span>
+                            <a href="#" id="link-spec-prompt" style="color: hsl(200, 85%, 75%); text-decoration: none; font-weight: 600;" onclick="event.preventDefault();">🤖 Copy Agent Prompt</a>
+                            <span style="color: rgba(255,255,255,0.15)">|</span>
+                            <a href="docs/architecture.schema.md" target="_blank" style="color: hsl(150, 75%, 70%); text-decoration: none; font-weight: 600;">📖 Schema Docs</a>
+                        </div>
+                    </div>
                     <textarea class="form-input form-textarea" id="project-json-input" placeholder="# My Project Title
 Version: 1.0
 
@@ -309,6 +318,88 @@ Version: 1.0
                 <button class="btn-secondary" id="project-modal-cancel" style="padding: 8px 16px; font-size:12px; border-radius: 8px; font-family: inherit; font-weight: 500; cursor: pointer;">Cancel</button>
                 <button class="btn-primary" id="project-modal-save" style="padding: 8px 16px; font-size:12px; border-radius: 8px; font-family: inherit; font-weight:600; cursor: pointer;">Save Project</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Project Onboarding Wizard Modal -->
+    <div class="modal-overlay" id="wizard-modal">
+        <div class="modal-card wizard-card">
+            <div class="modal-header">
+                <span class="modal-title" style="display: flex; align-items: center; gap: 6px;">
+                    <span style="background: linear-gradient(135deg, hsl(270,70%,60%), hsl(310,65%,62%)); padding: 2px 6px; border-radius: 4px; font-size: 11px;">New</span>
+                    Project Onboarding Wizard
+                </span>
+                <button class="modal-close" id="wizard-modal-close" title="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            
+            <!-- Step 1: Mode Selection -->
+            <div class="wizard-step active" id="wizard-step-1">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 20px; text-align: center; line-height: 1.4;">
+                    Welcome to Architecture Workbench! Let's get your architecture mapped in the next 2 minutes.
+                </div>
+                <div class="wizard-options">
+                    <button class="wizard-opt-btn" id="wizard-opt-analyze">
+                        <div class="wizard-opt-icon">🔍</div>
+                        <div class="wizard-opt-title">Analyze Existing Project</div>
+                        <div class="wizard-opt-desc">Select a folder or files. If architecture.md is found, we load it. Otherwise, we automatically scaffold one from your folder layout.</div>
+                    </button>
+                    <button class="wizard-opt-btn" id="wizard-opt-design">
+                        <div class="wizard-opt-icon">💡</div>
+                        <div class="wizard-opt-title">Design New Project</div>
+                        <div class="wizard-opt-desc">Describe your application concept in plain text, and we'll dynamically generate a starting architecture spec.</div>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Step 2A: Analyze Existing Project -->
+            <div class="wizard-step" id="wizard-step-analyze">
+                <div style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-size:11px;">Project Title</label>
+                    <input class="form-input" type="text" id="wizard-analyze-title" placeholder="e.g. My Backend Workspace" style="font-size: 11px; padding: 6px 10px;">
+                </div>
+                <div class="wizard-dropzone" id="wizard-dropzone">
+                    <div style="font-size: 24px; margin-bottom: 6px;">📁</div>
+                    <div style="font-weight: 600; margin-bottom: 2px; font-size: 12px; color: var(--text-primary);">Select Local Project Folder</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.3; max-width: 80%;">We scan for architecture.md, config files, and directories to map your architecture.</div>
+                    
+                    <input type="file" id="wizard-folder-input" webkitdirectory directory multiple style="display: none;">
+                    <button class="btn-primary" id="wizard-btn-browse-folder" style="padding: 6px 12px; font-size: 11px; font-weight: 600;">Choose Directory...</button>
+                    
+                    <div style="margin-top: 10px; font-size: 9px; color: rgba(255,255,255,0.3)">- OR CHOOSE A SINGLE SPEC FILE -</div>
+                    <input type="file" id="wizard-file-input" accept=".md,.json" style="display: none;">
+                    <button class="btn-secondary" id="wizard-btn-browse-file" style="padding: 4px 8px; font-size: 10px; margin-top: 6px; font-weight: 500;">Select .md or .json File</button>
+                </div>
+                
+                <div class="wizard-scan-status" id="wizard-scan-status" style="display: none; margin-top: 12px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.25); font-size: 11px; border: 1px dashed rgba(255,255,255,0.1); max-height: 120px; overflow-y: auto;">
+                    <!-- Dynamic status text -->
+                </div>
+                
+                <div class="wizard-nav" style="display: flex; justify-content: space-between; margin-top: 16px;">
+                    <button class="btn-secondary wizard-back-btn" style="padding: 6px 12px; font-size:11px; border-radius: 6px; font-family: inherit;">Back</button>
+                    <button class="btn-primary" id="wizard-btn-load-analyzed" disabled style="padding: 6px 12px; font-size:11px; border-radius: 6px; font-family: inherit; font-weight: 600;">Load Project</button>
+                </div>
+            </div>
+            
+            <!-- Step 2B: Design New Project -->
+            <div class="wizard-step" id="wizard-step-design">
+                <div style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-size:11px;">Project Title</label>
+                    <input class="form-input" type="text" id="wizard-design-title" placeholder="e.g. Serverless Authentication Service" style="font-size:11px; padding: 6px 10px;">
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="form-label" for="wizard-design-desc" style="font-size:11px;">Describe your system concept</label>
+                    <textarea class="form-input form-textarea" id="wizard-design-desc" style="height: 90px; font-size: 11px; line-height: 1.4;" placeholder="e.g. A three-tier SaaS platform. User accesses via web client, requests hit an API Gateway doing Auth, payments are queued in RabbitMQ and processed by a worker, and everything is saved to a PostgreSQL database."></textarea>
+                    <span class="form-note">Identify key modules (e.g. web/frontend, api, auth, queue/broker, worker, database, cache) to automatically generate system boundaries.</span>
+                </div>
+                
+                <div class="wizard-nav" style="display: flex; justify-content: space-between; margin-top: 16px;">
+                    <button class="btn-secondary wizard-back-btn" style="padding: 6px 12px; font-size:11px; border-radius: 6px; font-family: inherit;">Back</button>
+                    <button class="btn-primary" id="wizard-btn-generate-designed" style="padding: 6px 12px; font-size:11px; border-radius: 6px; font-family: inherit; font-weight: 600;">Generate Architecture</button>
+                </div>
+            </div>
+            
         </div>
     </div>
 

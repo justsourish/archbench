@@ -157,7 +157,50 @@ User can compare architecture versions over time.
 
 ---
 
-# Sprint 5 — LLM Integration Layer
+# Sprint 5 — Project Onboarding Experience
+
+Goal:
+
+Design a clean, folder-first, and concept-first onboarding flow instead of starting directly inside a raw Markdown specification editor.
+
+Tasks:
+
+* Design a multi-path onboarding wizard layout.
+* Implement **Analyze Existing Project** path:
+  * Select/drop a local directory using browser directory selectors.
+  * Scan directory recursively for a specification file (`architecture.md`).
+  * If found, automatically parse and initialize the workspace.
+  * If not found, run a folder heuristic scanner to auto-detect frontend/client, api, auth, worker, or database layouts to scaffold a starter architecture.
+* Implement **Design New Project** path:
+  * Prompt the user for a textual description of their project concept.
+  * Use local token analyzers to dynamically generate appropriate modules, connections, and flows.
+* Pivot the existing Markdown spec editor into an "Advanced Architecture Editor" accessible after project onboarding.
+
+Success Criteria:
+
+User can successfully onboard new local projects and scaffold initial architecture files in under 2 minutes without writing raw Markdown manually.
+
+---
+
+# Sprint 6 — BYOA Agent Runtime
+
+Goal:
+
+Establish the project workspace as the single source of truth for external terminal-based or IDE-integrated AI agents.
+
+Tasks:
+
+* Standardize workspace boundary configurations (`PROJECT_RULES.md`, `WORKBENCH.md`).
+* Implement architecture change detection and automatic project refresh.
+* Create a headless CLI validation/parsing utility for terminal-based audits.
+
+Success Criteria:
+
+An external agent can programmatically read, write, and validate project architecture, with ArcBench acting as a live visualization dashboard.
+
+---
+
+# Sprint 7 — LLM Integration Layer
 
 Goal:
 
@@ -186,7 +229,7 @@ User can connect any model.
 
 ---
 
-# Sprint 6 — Project Agent Terminal
+# Sprint 8 — Project Agent Terminal
 
 Goal:
 
@@ -212,11 +255,11 @@ arch export
 
 Success Criteria:
 
-Workbench can be operated through terminal commands.
+Intra-app terminal can operate the workspace.
 
 ---
 
-# Sprint 7 — Agent Context System
+# Sprint 9 — Agent Context System
 
 Goal:
 
@@ -246,7 +289,7 @@ Connected LLM can safely modify project architecture.
 
 ---
 
-# Sprint 8 — AI-Assisted Architecture
+# Sprint 10 — AI-Assisted Architecture
 
 Goal:
 
@@ -276,7 +319,7 @@ Architecture Workbench becomes AI-assisted.
 
 ---
 
-# Sprint 9 — Open Source Release
+# Sprint 11 — Open Source Release
 
 Goal:
 
@@ -320,3 +363,5 @@ Commit it.
 Only then move to the next sprint.
 
 Architecture Workbench must evolve incrementally and remain stable throughout development.
+
+

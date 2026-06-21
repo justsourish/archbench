@@ -3842,6 +3842,487 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
         });
     }
 
+    // ─── Onboarding Wizard (Sprint 5) ───────────────────────────
+    const wizardModal = document.getElementById("wizard-modal");
+    const wizardModalClose = document.getElementById("wizard-modal-close");
+    const wizardOptAnalyze = document.getElementById("wizard-opt-analyze");
+    const wizardOptDesign = document.getElementById("wizard-opt-design");
+    const wizardStep1 = document.getElementById("wizard-step-1");
+    const wizardStepAnalyze = document.getElementById("wizard-step-analyze");
+    const wizardStepDesign = document.getElementById("wizard-step-design");
+    const wizardAnalyzeTitle = document.getElementById("wizard-analyze-title");
+    const wizardDesignTitle = document.getElementById("wizard-design-title");
+    const wizardDesignDesc = document.getElementById("wizard-design-desc");
+    const wizardFolderInput = document.getElementById("wizard-folder-input");
+    const wizardFileInput = document.getElementById("wizard-file-input");
+    const wizardBtnBrowseFolder = document.getElementById("wizard-btn-browse-folder");
+    const wizardBtnBrowseFile = document.getElementById("wizard-btn-browse-file");
+    const wizardScanStatus = document.getElementById("wizard-scan-status");
+    const wizardBtnLoadAnalyzed = document.getElementById("wizard-btn-load-analyzed");
+    const wizardBtnGenerateDesigned = document.getElementById("wizard-btn-generate-designed");
+    const wizardDropzone = document.getElementById("wizard-dropzone");
+
+    let wizardScannedProjectSpec = null;
+
+    function openWizardModal() {
+        if (wizardAnalyzeTitle) wizardAnalyzeTitle.value = "";
+        if (wizardDesignTitle) wizardDesignTitle.value = "";
+        if (wizardDesignDesc) wizardDesignDesc.value = "";
+        if (wizardScanStatus) {
+            wizardScanStatus.style.display = "none";
+            wizardScanStatus.innerHTML = "";
+        }
+        if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = true;
+        wizardScannedProjectSpec = null;
+        showWizardStep(1);
+        if (wizardModal) wizardModal.classList.add("show");
+    }
+
+    function closeWizardModal() {
+        if (wizardModal) wizardModal.classList.remove("show");
+    }
+
+    function showWizardStep(step) {
+        if (wizardStep1) wizardStep1.classList.remove("active");
+        if (wizardStepAnalyze) wizardStepAnalyze.classList.remove("active");
+        if (wizardStepDesign) wizardStepDesign.classList.remove("active");
+
+        if (step === 1) {
+            if (wizardStep1) wizardStep1.classList.add("active");
+        } else if (step === "analyze") {
+            if (wizardStepAnalyze) wizardStepAnalyze.classList.add("active");
+        } else if (step === "design") {
+            if (wizardStepDesign) wizardStepDesign.classList.add("active");
+        }
+    }
+
+    if (wizardModalClose) {
+        wizardModalClose.addEventListener("click", closeWizardModal);
+    }
+    if (wizardOptAnalyze) {
+        wizardOptAnalyze.addEventListener("click", () => showWizardStep("analyze"));
+    }
+    if (wizardOptDesign) {
+        wizardOptDesign.addEventListener("click", () => showWizardStep("design"));
+    }
+    document.querySelectorAll(".wizard-back-btn").forEach(btn => {
+        btn.addEventListener("click", () => showWizardStep(1));
+    });
+
+    if (wizardBtnBrowseFolder && wizardFolderInput) {
+        wizardBtnBrowseFolder.addEventListener("click", () => wizardFolderInput.click());
+    }
+    if (wizardBtnBrowseFile && wizardFileInput) {
+        wizardBtnBrowseFile.addEventListener("click", () => wizardFileInput.click());
+    }
+
+    function handleScannedFiles(files, isFolder) {
+        if (!files || files.length === 0) return;
+        
+        let archFile = null;
+        let filesList = Array.from(files);
+        
+        for (let file of filesList) {
+            const name = file.name.toLowerCase();
+            const relPath = file.webkitRelativePath ? file.webkitRelativePath.toLowerCase() : "";
+            if (name === "architecture.md" || relPath.endsWith("architecture.md")) {
+                archFile = file;
+                break;
+            }
+        }
+
+        if (wizardScanStatus) {
+            wizardScanStatus.style.display = "block";
+            wizardScanStatus.innerHTML = "<span style='color: hsl(200, 85%, 75%);'>Scanning project files...</span>";
+        }
+
+        if (archFile) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const text = e.target.result;
+                    const parsed = parseMarkdownToProject(text);
+                    validateProjectData(parsed);
+                    
+                    wizardScannedProjectSpec = parsed;
+                    if (wizardAnalyzeTitle) wizardAnalyzeTitle.value = parsed.title;
+                    
+                    if (wizardScanStatus) {
+                        wizardScanStatus.innerHTML = `<span style="color: hsl(150, 75%, 70%); font-weight:600;">✅ Found architecture.md!</span><br>` +
+                            `<strong>Title:</strong> ${parsed.title}<br>` +
+                            `<strong>Version:</strong> ${parsed.version}<br>` +
+                            `<strong>Components:</strong> ${parsed.nodes.length} nodes, ${parsed.connections.length} connections.`;
+                    }
+                    if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = false;
+                } catch (err) {
+                    if (wizardScanStatus) {
+                        wizardScanStatus.innerHTML = `<span style="color: hsl(0, 72%, 62%); font-weight:600;">❌ Found architecture.md but failed parsing:</span><br>` +
+                            `<span style="font-size:10px; font-family:monospace; opacity:0.8;">${err.message}</span>`;
+                    }
+                }
+            };
+            reader.readAsText(archFile);
+        } else {
+            let hasClient = false, hasApi = false, hasDb = false, hasAuth = false, hasWorker = false;
+            let folderName = "";
+
+            filesList.forEach(file => {
+                const path = file.webkitRelativePath ? file.webkitRelativePath.toLowerCase() : file.name.toLowerCase();
+                if (!folderName && file.webkitRelativePath) {
+                    folderName = file.webkitRelativePath.split('/')[0];
+                }
+                if (path.includes("/client") || path.includes("/frontend") || path.includes("/web") || path.includes("index.html") || path.includes("app.js") || path.includes("app.tsx")) {
+                    hasClient = true;
+                }
+                if (path.includes("/api") || path.includes("/backend") || path.includes("/server") || path.includes("server.js") || path.includes("app.py")) {
+                    hasApi = true;
+                }
+                if (path.includes("/db") || path.includes("/database") || path.includes("/postgres") || path.includes("/mysql") || path.includes("/mongo") || path.includes("schema.sql")) {
+                    hasDb = true;
+                }
+                if (path.includes("/auth") || path.includes("login") || path.includes("session")) {
+                    hasAuth = true;
+                }
+                if (path.includes("/worker") || path.includes("/queue") || path.includes("rabbitmq") || path.includes("kafka") || path.includes("redis")) {
+                    hasWorker = true;
+                }
+            });
+
+            if (folderName && wizardAnalyzeTitle) {
+                wizardAnalyzeTitle.value = folderName.split(/[_-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+            } else if (wizardAnalyzeTitle && !wizardAnalyzeTitle.value) {
+                wizardAnalyzeTitle.value = "Workspace Scaffold";
+            }
+
+            const nodesList = [];
+            const connectionsList = [];
+            const flowsList = [];
+
+            if (hasClient || (!hasApi && !hasDb)) {
+                nodesList.push({
+                    id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250,
+                    desc: "Scaffolded client interface detected in project directory."
+                });
+            }
+            if (hasAuth) {
+                nodesList.push({
+                    id: "auth", category: "Service", title: "Authentication API", icon: "🔒", color: "hsl(280,85%,75%)", x: 550, y: 550,
+                    desc: "Scaffolded authentication system detected."
+                });
+            }
+            if (hasApi || hasWorker || hasDb) {
+                nodesList.push({
+                    id: "api", category: "Service", title: "Backend API Gateway", icon: "⚙️", color: "hsl(200,80%,58%)", x: 550, y: 250,
+                    desc: "Scaffolded core api controller."
+                });
+            }
+            if (hasWorker) {
+                nodesList.push({
+                    id: "worker", category: "Service", title: "Background Job Processor", icon: "📨", color: "hsl(28,85%,58%)", x: 800, y: 550,
+                    desc: "Scaffolded message queue worker."
+                });
+            }
+            if (hasDb) {
+                nodesList.push({
+                    id: "db", category: "Infrastructure", title: "Relational Database", icon: "🗄️", color: "hsl(170,70%,50%)", x: 800, y: 250,
+                    desc: "Scaffolded storage container."
+                });
+            }
+
+            if (nodesList.length === 0) {
+                nodesList.push(
+                    { id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250, desc: "Default client interface." },
+                    { id: "api", category: "Service", title: "Core Service", icon: "⚙️", color: "hsl(200,80%,58%)", x: 750, y: 250, desc: "Default backend API service." }
+                );
+            }
+
+            const nodeIds = nodesList.map(n => n.id);
+            if (nodeIds.includes("client") && nodeIds.includes("api")) {
+                connectionsList.push(["client", "api", "HTTPS Request", "request"]);
+            }
+            if (nodeIds.includes("api") && nodeIds.includes("auth")) {
+                connectionsList.push(["api", "auth", "Authorize User", "request"]);
+            }
+            if (nodeIds.includes("api") && nodeIds.includes("worker")) {
+                connectionsList.push(["api", "worker", "Publish Job", "data"]);
+            }
+            if (nodeIds.includes("api") && nodeIds.includes("db")) {
+                connectionsList.push(["api", "db", "Read/Write SQL", "data"]);
+            }
+            if (nodeIds.includes("worker") && nodeIds.includes("db")) {
+                connectionsList.push(["worker", "db", "Update State", "data"]);
+            }
+            
+            if (connectionsList.length === 0 && nodeIds.length >= 2) {
+                connectionsList.push([nodeIds[0], nodeIds[1], "Connects To", "request"]);
+            }
+
+            const flowSteps = [];
+            nodesList.forEach(n => {
+                flowSteps.push({
+                    node: n.id,
+                    label: `Process at ${n.title}`,
+                    detail: `Scaffolded pipeline execution step at ${n.title}.`,
+                    data: `{"scaffold": true}`
+                });
+            });
+
+            flowsList.push({
+                id: "main_scaffold_flow",
+                title: "Default Execution Scenario",
+                subtitle: "Automatically generated scenario walkthrough",
+                steps: flowSteps
+            });
+
+            const spec = {
+                title: wizardAnalyzeTitle.value.trim() || "Workspace Scaffold",
+                version: "1.0",
+                nodes: nodesList,
+                connections: connectionsList,
+                flows: flowsList
+            };
+
+            wizardScannedProjectSpec = spec;
+            if (wizardScanStatus) {
+                let detectedText = [];
+                if (hasClient) detectedText.push("Frontend (Client)");
+                if (hasApi) detectedText.push("Backend (API)");
+                if (hasDb) detectedText.push("Database");
+                if (hasAuth) detectedText.push("Auth Module");
+                if (hasWorker) detectedText.push("Worker Queue");
+                
+                if (detectedText.length === 0) detectedText.push("Generic project directory");
+
+                wizardScanStatus.innerHTML = `<span style="color: hsl(32, 85%, 58%); font-weight:600;">⚠️ architecture.md not found.</span><br>` +
+                    `Detected structure components: <strong>${detectedText.join(", ")}</strong>.<br>` +
+                    `We scaffolded ${nodesList.length} nodes and ${connectionsList.length} connections to match. Ready to load!`;
+            }
+            if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = false;
+        }
+    }
+
+    if (wizardFolderInput) {
+        wizardFolderInput.addEventListener("change", (e) => {
+            handleScannedFiles(e.target.files, true);
+        });
+    }
+
+    if (wizardFileInput) {
+        wizardFileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const isJson = file.name.toLowerCase().endsWith(".json");
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    let spec;
+                    if (isJson) {
+                        spec = JSON.parse(event.target.result);
+                    } else {
+                        spec = parseMarkdownToProject(event.target.result);
+                    }
+                    validateProjectData(spec);
+                    wizardScannedProjectSpec = spec;
+                    if (wizardAnalyzeTitle) wizardAnalyzeTitle.value = spec.title;
+                    if (wizardScanStatus) {
+                        wizardScanStatus.style.display = "block";
+                        wizardScanStatus.innerHTML = `<span style="color: hsl(150, 75%, 70%); font-weight:600;">✅ Loaded Specification File!</span><br>` +
+                            `<strong>Title:</strong> ${spec.title}<br>` +
+                            `<strong>Nodes:</strong> ${spec.nodes.length}, <strong>Connections:</strong> ${spec.connections.length}`;
+                    }
+                    if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = false;
+                } catch(err) {
+                    if (wizardScanStatus) {
+                        wizardScanStatus.style.display = "block";
+                        wizardScanStatus.innerHTML = `<span style="color: hsl(0, 72%, 62%); font-weight:600;">❌ File loading failed:</span><br>` +
+                            `<span style="font-size:10px; font-family:monospace; opacity:0.8;">${err.message}</span>`;
+                    }
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    if (wizardBtnLoadAnalyzed) {
+        wizardBtnLoadAnalyzed.addEventListener("click", () => {
+            if (!wizardScannedProjectSpec) return;
+            
+            const titleVal = wizardAnalyzeTitle.value.trim();
+            if (titleVal) {
+                wizardScannedProjectSpec.title = titleVal;
+            }
+
+            const custom = getCustomProjects();
+            const newId = "project-" + Date.now();
+            wizardScannedProjectSpec.id = newId;
+            custom.push(wizardScannedProjectSpec);
+            saveCustomProjects(custom);
+            loadProject(wizardScannedProjectSpec);
+            closeWizardModal();
+            showToast(`Project '${wizardScannedProjectSpec.title}' loaded and initialized!`);
+        });
+    }
+
+    if (wizardDropzone) {
+        wizardDropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            wizardDropzone.classList.add("dragover");
+        });
+        wizardDropzone.addEventListener("dragleave", () => {
+            wizardDropzone.classList.remove("dragover");
+        });
+        wizardDropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            wizardDropzone.classList.remove("dragover");
+            if (e.dataTransfer.files) {
+                handleScannedFiles(e.dataTransfer.files, false);
+            }
+        });
+    }
+
+    if (wizardModal) {
+        wizardModal.addEventListener("click", (e) => {
+            if (e.target === wizardModal) {
+                closeWizardModal();
+            }
+        });
+    }
+
+    if (wizardBtnGenerateDesigned) {
+        wizardBtnGenerateDesigned.addEventListener("click", () => {
+            const titleVal = wizardDesignTitle.value.trim() || "My New System Architecture";
+            const descVal = wizardDesignDesc.value.trim().toLowerCase();
+            
+            const nodesList = [];
+            const connectionsList = [];
+            const flowsList = [];
+
+            const hasClient = descVal.includes("client") || descVal.includes("frontend") || descVal.includes("web") || descVal.includes("ui") || descVal.includes("react") || descVal.includes("next") || descVal.includes("vue") || descVal.includes("app");
+            const hasGateway = descVal.includes("gateway") || descVal.includes("proxy") || descVal.includes("nginx") || descVal.includes("load balancer");
+            const hasAuth = descVal.includes("auth") || descVal.includes("oauth") || descVal.includes("jwt") || descVal.includes("login") || descVal.includes("identity") || descVal.includes("cognito");
+            const hasWorker = descVal.includes("worker") || descVal.includes("queue") || descVal.includes("rabbitmq") || descVal.includes("kafka") || descVal.includes("celery") || descVal.includes("redis") || descVal.includes("broker");
+            const hasDb = descVal.includes("database") || descVal.includes("db") || descVal.includes("postgres") || descVal.includes("postgresql") || descVal.includes("mysql") || descVal.includes("sqlite") || descVal.includes("mongodb") || descVal.includes("dynamo");
+            const hasApi = descVal.includes("api") || descVal.includes("backend") || descVal.includes("service") || descVal.includes("python") || descVal.includes("node") || descVal.includes("django") || descVal.includes("flask") || descVal.includes("express") || descVal.includes("spring");
+
+            if (hasClient || (!hasGateway && !hasAuth && !hasWorker && !hasDb && !hasApi)) {
+                nodesList.push({
+                    id: "client", category: "Entry Point", title: "Web Client Portal", icon: "💻", color: "hsl(210,85%,62%)", x: 200, y: 150,
+                    desc: "User-facing dashboard and interactive portal interface.",
+                    sections: [{ label: "Capabilities", items: ["Render Views", "Form Inputs", "Event Handling"] }]
+                });
+            }
+            if (hasGateway) {
+                nodesList.push({
+                    id: "gateway", category: "Service", title: "Edge API Gateway", icon: "🛡️", color: "hsl(270,70%,65%)", x: 500, y: 150,
+                    desc: "Ingress security router and authentication proxy gateway.",
+                    sections: [{ label: "Middlewares", items: ["Rate Limiter", "Router"] }]
+                });
+            }
+            if (hasAuth) {
+                nodesList.push({
+                    id: "auth", category: "Service", title: "Authentication API", icon: "🔒", color: "hsl(280,85%,75%)", x: 500, y: 450,
+                    desc: "Authenticates users, signs JSON Web Tokens, and manages sessions.",
+                    sections: [{ label: "Tech Stack", items: ["JWT", "BCrypt"] }]
+                });
+            }
+            if (hasApi || (!hasClient && nodesList.length === 0)) {
+                nodesList.push({
+                    id: "api", category: "Service", title: "Core Business Service", icon: "⚙️", color: "hsl(220,80%,62%)", x: 800, y: 150,
+                    desc: "Handles transactional requests and processes core workflows.",
+                    sections: [{ label: "Controller Endpoints", items: ["POST /orders", "GET /data"] }]
+                });
+            }
+            if (hasWorker) {
+                nodesList.push({
+                    id: "worker", category: "Service", title: "Task Event Worker", icon: "📨", color: "hsl(28,85%,58%)", x: 800, y: 450,
+                    desc: "Asynchronous task queue workers running background jobs.",
+                    sections: [{ label: "Workers", items: ["Email Processing", "Image Scaling"] }]
+                });
+            }
+            if (hasDb) {
+                let dbTitle = "Database Store";
+                let dbIcon = "🗄️";
+                if (descVal.includes("postgres")) dbTitle = "PostgreSQL DB";
+                else if (descVal.includes("mysql")) dbTitle = "MySQL DB";
+                else if (descVal.includes("mongo")) { dbTitle = "MongoDB Store"; dbIcon = "🍃"; }
+                else if (descVal.includes("redis")) { dbTitle = "Redis Cache"; dbIcon = "⚡"; }
+
+                nodesList.push({
+                    id: "db", category: "Infrastructure", title: dbTitle, icon: dbIcon, color: "hsl(170,70%,50%)", x: 1100, y: 150,
+                    desc: "Persistent relational and transactional storage node.",
+                    sections: [{ label: "Tables/Schemas", items: ["Users Registry", "Audit Logs"] }]
+                });
+            }
+
+            if (nodesList.length === 0) {
+                nodesList.push(
+                    { id: "client", category: "Entry Point", title: "Client Web App", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250, desc: "User client view." },
+                    { id: "api", category: "Service", title: "Backend Controller", icon: "⚙️", color: "hsl(200,80%,58%)", x: 750, y: 250, desc: "Processes logical APIs." }
+                );
+            }
+
+            const nodeIds = nodesList.map(n => n.id);
+            if (nodeIds.includes("client") && nodeIds.includes("gateway")) {
+                connectionsList.push(["client", "gateway", "HTTPS Api Request", "request"]);
+            } else if (nodeIds.includes("client") && nodeIds.includes("api")) {
+                connectionsList.push(["client", "api", "HTTPS Request", "request"]);
+            }
+
+            if (nodeIds.includes("gateway") && nodeIds.includes("auth")) {
+                connectionsList.push(["gateway", "auth", "Authorize Key", "request"]);
+            }
+            if (nodeIds.includes("gateway") && nodeIds.includes("api")) {
+                connectionsList.push(["gateway", "api", "Forward Route", "request"]);
+            }
+            if (nodeIds.includes("api") && nodeIds.includes("worker")) {
+                connectionsList.push(["api", "worker", "Publish Event Task", "data"]);
+            }
+            if (nodeIds.includes("api") && nodeIds.includes("db")) {
+                connectionsList.push(["api", "db", "Read/Write Queries", "data"]);
+            }
+            if (nodeIds.includes("worker") && nodeIds.includes("db")) {
+                connectionsList.push(["worker", "db", "Save Task Result", "data"]);
+            }
+
+            if (connectionsList.length === 0 && nodeIds.length >= 2) {
+                connectionsList.push([nodeIds[0], nodeIds[1], "HTTP Request", "request"]);
+            }
+
+            const flowSteps = [];
+            nodesList.forEach(n => {
+                flowSteps.push({
+                    node: n.id,
+                    label: `Activate ${n.title}`,
+                    detail: `Workflow processes payload at ${n.title}.`,
+                    data: `{"activated": "${n.id}"}`
+                });
+            });
+
+            flowsList.push({
+                id: "generated_flow",
+                title: "Simulated Data Flow Scenario",
+                subtitle: "Automatically generated playback timeline for design concept",
+                steps: flowSteps
+            });
+
+            const spec = {
+                id: "project-" + Date.now(),
+                title: titleVal,
+                version: "1.0",
+                nodes: nodesList,
+                connections: connectionsList,
+                flows: flowsList
+            };
+
+            const custom = getCustomProjects();
+            custom.push(spec);
+            saveCustomProjects(custom);
+            loadProject(spec);
+            closeWizardModal();
+            showToast(`Successfully designed and generated '${titleVal}'!`);
+        });
+    }
+
     let editingProjectId = null;
 
     function openProjectModal(projId = null) {
@@ -4018,7 +4499,7 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     if (dropdownBtnCreate) {
         dropdownBtnCreate.addEventListener("click", () => {
             if (projectDropdown) projectDropdown.classList.remove("show");
-            openProjectModal(null);
+            openWizardModal();
         });
     }
 
@@ -4108,6 +4589,55 @@ Write detailed test specifications (both happy path and edge/fail cases) for ver
     if (projectModalClose) projectModalClose.addEventListener("click", closeProjectModal);
     if (projectModalCancel) projectModalCancel.addEventListener("click", closeProjectModal);
     if (projectModalSave) projectModalSave.addEventListener("click", saveProjectFromModal);
+
+    // ─── Architecture Spec Kit Helpers ──────────────────────────
+    const linkSpecTemplate = document.getElementById("link-spec-template");
+    const linkSpecPrompt = document.getElementById("link-spec-prompt");
+
+    if (linkSpecTemplate) {
+        linkSpecTemplate.addEventListener("click", async (e) => {
+            e.preventDefault();
+            try {
+                const resp = await fetch("docs/architecture.template.md");
+                if (!resp.ok) throw new Error("Failed to load template: " + resp.status);
+                const templateText = await resp.text();
+                if (projectJsonInput) {
+                    projectJsonInput.value = templateText;
+                    projectJsonInput.focus();
+                }
+                showToast("📋 Architecture template loaded into editor.");
+            } catch (err) {
+                console.error("Load template error:", err);
+                showToast("⚠️ Could not load template file.");
+            }
+        });
+    }
+
+    if (linkSpecPrompt) {
+        linkSpecPrompt.addEventListener("click", async (e) => {
+            e.preventDefault();
+            try {
+                const resp = await fetch("docs/agent_prompt.md");
+                if (!resp.ok) throw new Error("Failed to load agent prompt: " + resp.status);
+                const promptText = await resp.text();
+                await navigator.clipboard.writeText(promptText);
+                showToast("🤖 Agent prompt copied to clipboard! Paste into your LLM client.");
+            } catch (err) {
+                console.error("Copy agent prompt error:", err);
+                // Fallback: open in new tab if clipboard fails
+                try {
+                    const resp2 = await fetch("docs/agent_prompt.md");
+                    const text2 = await resp2.text();
+                    const blob = new Blob([text2], { type: "text/markdown" });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, "_blank");
+                    showToast("📄 Agent prompt opened in new tab (clipboard unavailable).");
+                } catch (e2) {
+                    showToast("⚠️ Could not load agent prompt file.");
+                }
+            }
+        });
+    }
 
 
     // ─── Init ───────────────────────────────────────────────────
