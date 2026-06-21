@@ -19,6 +19,7 @@ import { updateArchitectureHistoryUI } from "./js/history-ui.js";
 import { initBatchRunner, populateBatchChecklist, stopBatchRun, generateBatchLogMarkdown } from "./js/batch-runner.js";
 import { initFlowEngine, startFlow, exitFlow, stopAutoPlay, renderFlowStep, activeFlow, activeStep, setActiveFlow, setActiveStep } from "./js/flow-engine.js";
 import { initCanvasRenderer, buildNode, measureNodes, drawConnections, panToNode, updateMinimap, fitToView, clearNodeState, nodeEls } from "./js/canvas-renderer.js";
+import { APP_ENV, IS_HOSTED } from "./js/env.js";
 
 export { localHistoryCache, initDB, reloadHistoryCache, saveAuditRun, deleteAuditRun, clearProjectHistoryFromDB, updateArchitectureHistoryUI };
 export { initBatchRunner, populateBatchChecklist, stopBatchRun, generateBatchLogMarkdown };
@@ -50,7 +51,7 @@ export { drawConnections, panToNode, nodeEls };
     if (window.ARCHBENCH_PROJECT_MD) {
         try {
             project = parseMarkdownToProject(window.ARCHBENCH_PROJECT_MD);
-            project.id = "trace-sample";
+            project.id = "demo-sample";
         } catch (e) {
             console.error("Failed to parse window.ARCHBENCH_PROJECT_MD:", e);
         }
@@ -89,13 +90,13 @@ export { drawConnections, panToNode, nodeEls };
 
     // Project System DOM Bindings
     const btnProjectSelector = document.getElementById("btn-project-selector");
+    const btnProjectNew      = document.getElementById("btn-project-new");
+    const btnProjectImport   = document.getElementById("btn-project-import");
     const projectDropdown    = document.getElementById("project-dropdown");
     const projectList        = document.getElementById("project-list");
     const currentProjectTitle = document.getElementById("current-project-title");
     
-    const dropdownBtnCreate  = document.getElementById("dropdown-btn-create");
     const dropdownBtnEdit    = document.getElementById("dropdown-btn-edit");
-    const dropdownBtnImport  = document.getElementById("dropdown-btn-import");
     const dropdownBtnExport  = document.getElementById("dropdown-btn-export");
     
     const projectFileInput   = document.getElementById("project-file-input");
@@ -251,6 +252,7 @@ export { drawConnections, panToNode, nodeEls };
     // ─── ARCHITECTURE IDE LOGS & AI EXPORTS ──────────────────────
 
     const btnIde = document.getElementById("btn-ide");
+    const btnLiveWatch = document.getElementById("btn-live-watch");
     const btnTermToggle = document.getElementById("btn-term-toggle");
     const tabBtnSimulator = document.getElementById("tab-btn-simulator");
     const tabBtnLog = document.getElementById("tab-btn-log");
@@ -306,6 +308,7 @@ export { drawConnections, panToNode, nodeEls };
     const inputOpenaiUrl = document.getElementById("ai-openai-url");
     const inputOllamaUrl = document.getElementById("ai-ollama-url");
     const inputOllamaModel = document.getElementById("ai-ollama-model");
+    const liveWatchLabel = document.getElementById("live-watch-text");
 
     const btnCopyLogJson = document.getElementById("btn-copy-log-json");
     const btnCopyLogMd = document.getElementById("btn-copy-log-md");
@@ -317,6 +320,13 @@ export { drawConnections, panToNode, nodeEls };
     // AI_PROMPTS moved to js/constants.js
 
     let selectedAiKey = "review";
+
+    if (IS_HOSTED) {
+        if (btnLiveWatch) btnLiveWatch.style.display = "none";
+        if (btnTermToggle) btnTermToggle.style.display = "none";
+        if (tabBtnTerminal) tabBtnTerminal.style.display = "none";
+        if (panelTerminal) panelTerminal.style.display = "none";
+    }
 
     // generateExecutionLogJSON, generateExecutionLogMarkdown, generateKnowledgePackJSON, and generateKnowledgePackMarkdown moved to js/reports/generators.js
 
@@ -344,6 +354,10 @@ export { drawConnections, panToNode, nodeEls };
 
     export function switchTab(targetId) {
         if (!flowPanel) return;
+        if (targetId === "terminal" && IS_HOSTED) {
+            showToast("Terminal is available in local mode only.");
+            return;
+        }
 
         if (targetId === activeTabId && !flowPanel.classList.contains("collapsed")) {
             // Clicking already active tab collapses the sidebar panel
@@ -380,7 +394,7 @@ export { drawConnections, panToNode, nodeEls };
         if (fpTitle && fpSubtitle) {
             if (targetId === "ai") {
                 fpTitle.textContent = "AI System Architect";
-                fpSubtitle.textContent = "Conversational copilot & reviews";
+                fpSubtitle.textContent = "";
             } else if (targetId === "simulator") {
                 fpTitle.textContent = activeFlow ? activeFlow.title : "Trace Flow Simulator";
                 fpSubtitle.textContent = activeFlow ? activeFlow.subtitle : "Step-by-step trace playback";
@@ -416,9 +430,22 @@ export { drawConnections, panToNode, nodeEls };
     if (tabBtnHealth) tabBtnHealth.addEventListener("click", () => switchTab("health"));
     if (tabBtnHistory) tabBtnHistory.addEventListener("click", () => switchTab("history"));
     if (tabBtnTerminal) tabBtnTerminal.addEventListener("click", () => switchTab("terminal"));
+    if (btnLiveWatch) {
+        btnLiveWatch.addEventListener("click", () => {
+            if (IS_HOSTED) {
+                showToast("Live Watch is available in local mode only.");
+                return;
+            }
+            toggleLiveWatch();
+        });
+    }
 
     if (btnTermToggle) {
         btnTermToggle.addEventListener("click", () => {
+            if (IS_HOSTED) {
+                showToast("Terminal is available in local mode only.");
+                return;
+            }
             stopAutoPlay();
             flowPanel.classList.remove("collapsed", "hidden");
             // Switch to terminal tab (expand if collapsed)
@@ -976,7 +1003,7 @@ export { drawConnections, panToNode, nodeEls };
     // updateArchitectureHistoryUI and formatComparisonMetric moved to js/history-ui.js
 
     // ─── PROJECT SYSTEM ──────────────────────────────────────────
-    export const DEFAULT_PROJECT_ID = "trace-sample";
+    export const DEFAULT_PROJECT_ID = "demo-sample";
 
     const SKELETON_TEMPLATE = {
         nodes: [
@@ -1058,7 +1085,7 @@ export { drawConnections, panToNode, nodeEls };
         const custom = getCustomProjects();
         const list = [];
         
-        // Always include built-in TRACE project as default
+        // Always include the built-in public demo project as default
         const builtIn = { ...project };
         if (!builtIn.id) builtIn.id = DEFAULT_PROJECT_ID;
         list.push(builtIn);
@@ -1897,6 +1924,10 @@ export { drawConnections, panToNode, nodeEls };
         
         // Initialize default sidebar tab and active headers on launch
         switchTab("ai");
+
+        if (IS_HOSTED && liveWatchLabel) {
+            liveWatchLabel.textContent = "Local Only";
+        }
     }
 
     // ─── Attach Listeners ────────────────────────────────────────
@@ -1924,8 +1955,8 @@ export { drawConnections, panToNode, nodeEls };
         });
     }
 
-    if (dropdownBtnCreate) {
-        dropdownBtnCreate.addEventListener("click", () => {
+    if (btnProjectNew) {
+        btnProjectNew.addEventListener("click", () => {
             if (projectDropdown) projectDropdown.classList.remove("show");
             openWizardModal();
         });
@@ -1940,8 +1971,8 @@ export { drawConnections, panToNode, nodeEls };
         });
     }
 
-    if (dropdownBtnImport) {
-        dropdownBtnImport.addEventListener("click", () => {
+    if (btnProjectImport) {
+        btnProjectImport.addEventListener("click", () => {
             if (projectDropdown) projectDropdown.classList.remove("show");
             if (projectFileInput) projectFileInput.click();
         });
@@ -2074,6 +2105,7 @@ export { drawConnections, panToNode, nodeEls };
     // ─── Init ───────────────────────────────────────────────────
 
     // Replaces default startup static drawings by loading project dynamically
+    document.body.dataset.appEnv = APP_ENV;
     startupProjectSystem();
     initCanvasRenderer();
     initAIEngine();

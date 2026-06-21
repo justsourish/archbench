@@ -1,6 +1,7 @@
 import { currentProject, DEFAULT_PROJECT_ID, getCustomProjects, saveCustomProjects, loadProject } from "../graph.js";
 import { parseMarkdownToProject, validateProjectData } from "./parser.js";
 import { showToast } from "./utils.js";
+import { IS_HOSTED } from "./env.js";
 
 let isLiveWatching = false;
 let liveWatchInterval = null;
@@ -11,6 +12,10 @@ const btnLiveWatch = document.getElementById("btn-live-watch");
 const liveWatchText = document.getElementById("live-watch-text");
 
 export async function toggleLiveWatch() {
+    if (IS_HOSTED) {
+        showToast("Live Watch is available in local mode only.");
+        return;
+    }
     if (isLiveWatching) {
         stopLiveWatch();
     } else {
@@ -19,6 +24,10 @@ export async function toggleLiveWatch() {
 }
 
 export async function startLiveWatch() {
+    if (IS_HOSTED) {
+        showToast("Live Watch is available in local mode only.");
+        return;
+    }
     if (window.showOpenFilePicker) {
         try {
             const [handle] = await window.showOpenFilePicker({
@@ -55,7 +64,7 @@ export async function startLiveWatch() {
             } else {
                 let fetchUrl = "architecture.md";
                 if (currentProject && currentProject.id === DEFAULT_PROJECT_ID) {
-                    fetchUrl = "samples/trace.md";
+                    fetchUrl = "samples/demo.md";
                 }
                 const resp = await fetch(fetchUrl, { cache: "no-store" });
                 if (resp.ok) {

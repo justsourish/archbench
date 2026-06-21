@@ -10,7 +10,7 @@ export function updateArchitectureHistoryUI() {
     if (!historyReportContent) return;
 
     reloadHistoryCache().then(() => {
-        const currentProjId = currentProject ? currentProject.id : "trace-sample";
+        const currentProjId = currentProject ? currentProject.id : "demo-sample";
         const runs = localHistoryCache.auditRuns.filter(r => !r.projectId || r.projectId === currentProjId);
         const healths = localHistoryCache.healthHistory.filter(h => !h.projectId || h.projectId === currentProjId);
         const snaps = localHistoryCache.architectureSnapshots.filter(s => !s.projectId || s.projectId === currentProjId);

@@ -4,9 +4,9 @@
 
 Architecture Workbench is a local-first, open-source Architecture IDE.
 
-It is not tied to TRACE.
+It is not tied to any one sample project.
 
-TRACE is only the first project built inside it.
+The original private sample was only the first project built inside it.
 
 Architecture Workbench allows developers, founders, architects, and engineers to:
 
@@ -30,23 +30,23 @@ Core Philosophy:
 
 ---
 
-# Sprint 0 — Separation from TRACE
+# Sprint 0 — Separation from the Legacy Sample
 
 Goal:
 
-Separate the Workbench from the TRACE project.
+Separate the Workbench from the original private sample project.
 
 Tasks:
 
-* Rename application references from TRACE Simulator to Architecture Workbench.
-* Remove TRACE-specific branding.
-* Convert TRACE into a sample project.
+* Rename application references from the legacy simulator branding to Architecture Workbench.
+* Remove sample-specific branding.
+* Convert the original sample into a neutral public demo.
 * Create generic architecture terminology.
 * Ensure all UI components work with arbitrary architectures.
 
 Success Criteria:
 
-Workbench can visualize architectures that are not TRACE.
+Workbench can visualize architectures that are not tied to the original sample domain.
 
 ---
 
@@ -332,7 +332,7 @@ Tasks:
 
 Sample Projects:
 
-* TRACE
+* Legacy sample project
 * Example SaaS
 * Example E-commerce
 * Example Startup
@@ -360,5 +360,4 @@ Commit it.
 Only then move to the next sprint.
 
 Architecture Workbench must evolve incrementally and remain stable throughout development.
-
 

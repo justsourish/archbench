@@ -9,6 +9,11 @@ let sectionGemini, sectionOpenai, sectionOllama;
 let inputGeminiKey, inputGeminiModel, inputGeminiUrl;
 let inputOpenaiKey, inputOpenaiModel, inputOpenaiUrl;
 let inputOllamaUrl, inputOllamaModel;
+let aiModelBadge, aiToolsToggle, aiToolsPanel, aiOverflowTemplates, panelAi, aiToolsPopover;
+let showPromptCloud = false;
+
+const PRIMARY_PROMPT_KEYS = ["review", "missing", "security", "api"];
+const PROMPT_ORDER = ["review", "missing", "security", "api", "redundant", "schema", "documentation", "sequence", "stories", "tasks", "testcases", "sop"];
 
 let chatHistoryLog = [];
 
@@ -38,6 +43,12 @@ export function initAIEngine() {
     inputOpenaiUrl = document.getElementById("ai-openai-url");
     inputOllamaUrl = document.getElementById("ai-ollama-url");
     inputOllamaModel = document.getElementById("ai-ollama-model");
+    aiModelBadge = document.getElementById("ai-model-badge");
+    aiToolsToggle = document.getElementById("ai-tools-toggle");
+    aiToolsPanel = document.getElementById("ai-tools-panel");
+    aiToolsPopover = document.getElementById("ai-tools-popover");
+    aiOverflowTemplates = document.getElementById("ai-overflow-templates");
+    panelAi = document.getElementById("panel-ai");
 
     // Wire up event listeners
     if (btnAiSettings) {
@@ -58,6 +69,7 @@ export function initAIEngine() {
     if (aiProviderSelect) {
         aiProviderSelect.addEventListener("change", () => {
             updateProviderSectionsVisibility();
+            updateModelBadge();
         });
     }
     if (btnClearChat) {
@@ -71,8 +83,7 @@ export function initAIEngine() {
     if (aiChatInput) {
         // Auto-growing textarea for chat input
         aiChatInput.addEventListener("input", () => {
-            aiChatInput.style.height = "auto";
-            aiChatInput.style.height = Math.min(100, aiChatInput.scrollHeight) + "px";
+            syncComposerHeight();
         });
 
         // Key press handlers (Enter to send, Shift+Enter for new line)
@@ -98,7 +109,7 @@ export function initAIEngine() {
                 }
                 
                 aiChatInput.value = "";
-                aiChatInput.style.height = "34px";
+                resetComposerHeight();
                 sendChatMessage(finalPrompt, text);
             } catch (err) {
                 console.error("AI Send click error:", err);
@@ -107,10 +118,44 @@ export function initAIEngine() {
         });
     }
 
+    if (aiToolsToggle && aiToolsPanel) {
+        aiToolsToggle.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            showPromptCloud = !showPromptCloud;
+            renderPromptToggleState();
+        });
+    }
+
+    if (panelAi) {
+        panelAi.addEventListener("click", (event) => {
+            if (!showPromptCloud || !aiToolsPanel || !aiToolsPopover) return;
+            if (aiToolsPanel.contains(event.target) || aiToolsPopover.contains(event.target)) return;
+            showPromptCloud = false;
+            renderPromptToggleState();
+        });
+    }
+
+    [
+        inputGeminiModel,
+        inputOpenaiModel,
+        inputOllamaModel,
+        inputGeminiKey,
+        inputOpenaiKey,
+        inputOllamaUrl
+    ].forEach(input => {
+        if (input) {
+            input.addEventListener("input", () => {
+                updateModelBadge();
+            });
+        }
+    });
+
     // Initial load & render
     loadAISettings();
     initChatHistory();
     populateAIGrid();
+    resetComposerHeight();
 }
 
 function loadAISettings() {
@@ -138,6 +183,18 @@ function loadAISettings() {
     }
 
     updateProviderSectionsVisibility();
+    updateModelBadge();
+}
+
+function renderPromptToggleState() {
+    if (!aiToolsToggle || !aiToolsPopover) return;
+    aiToolsPopover.classList.toggle("open", showPromptCloud);
+    aiToolsPopover.setAttribute("aria-hidden", showPromptCloud ? "false" : "true");
+    aiToolsToggle.setAttribute("aria-expanded", showPromptCloud ? "true" : "false");
+    aiToolsToggle.setAttribute("title", showPromptCloud ? "Hide extra prompts" : "Show more prompts");
+    if (aiToolsPanel) {
+        aiToolsPanel.classList.toggle("popover-open", showPromptCloud);
+    }
 }
 
 function saveAISettings() {
@@ -166,6 +223,8 @@ function saveAISettings() {
     if (aiSettingsDrawer) {
         aiSettingsDrawer.classList.remove("open");
     }
+
+    updateModelBadge();
     
     // Re-render chat welcoming flow if key just changed
     initChatHistory();
@@ -177,6 +236,41 @@ function updateProviderSectionsVisibility() {
     if (sectionGemini) sectionGemini.style.display = val === "gemini" ? "flex" : "none";
     if (sectionOpenai) sectionOpenai.style.display = val === "openai" ? "flex" : "none";
     if (sectionOllama) sectionOllama.style.display = val === "ollama" ? "flex" : "none";
+}
+
+function syncComposerHeight() {
+    if (!aiChatInput) return;
+    aiChatInput.style.height = "auto";
+    aiChatInput.style.height = Math.min(140, Math.max(54, aiChatInput.scrollHeight)) + "px";
+}
+
+function resetComposerHeight() {
+    if (!aiChatInput) return;
+    aiChatInput.style.height = "54px";
+}
+
+function getCurrentProviderDisplay() {
+    const provider = aiProviderSelect?.value || localStorage.getItem("archbench_ai_provider") || "gemini";
+    if (provider === "gemini") {
+        const model = (inputGeminiModel?.value || localStorage.getItem("archbench_gemini_model") || "gemini-2.5-flash").trim();
+        const hasKey = !!((inputGeminiKey?.value || localStorage.getItem("archbench_gemini_key") || "").trim());
+        return hasKey ? `Gemini • ${model}` : "Gemini • key needed";
+    }
+    if (provider === "openai") {
+        const model = (inputOpenaiModel?.value || localStorage.getItem("archbench_openai_model") || "gpt-4o").trim();
+        const hasKey = !!((inputOpenaiKey?.value || localStorage.getItem("archbench_openai_key") || "").trim());
+        return hasKey ? `OpenAI-compatible • ${model}` : "OpenAI-compatible • key needed";
+    }
+    if (provider === "ollama") {
+        const model = (inputOllamaModel?.value || localStorage.getItem("archbench_ollama_model") || "qwen2.5:coder").trim();
+        return `Ollama • ${model}`;
+    }
+    return "No provider configured";
+}
+
+function updateModelBadge() {
+    if (!aiModelBadge) return;
+    aiModelBadge.textContent = getCurrentProviderDisplay();
 }
 
 export function appendMessage(role, content, isHtml = false) {
@@ -236,8 +330,8 @@ export function initChatHistory() {
         setupCard.className = "ai-setup-card";
         setupCard.innerHTML = `
             <div class="ai-setup-icon">🔑</div>
-            <div class="ai-setup-title">Setup API Key Required</div>
-            <div class="ai-setup-text">Real-time system analysis requires an active LLM API Key. Google Gemini and OpenAI are supported client-side. Keys are stored safely in local storage.</div>
+            <div class="ai-setup-title">Configure Your Assistant</div>
+            <div class="ai-setup-text">Choose Gemini, an OpenAI-compatible provider, or Ollama. Browser-saved settings stay local to this device.</div>
             <button class="ai-setup-btn" id="btn-chat-trigger-settings">⚙️ Configure LLM Settings</button>
         `;
         aiChatHistory.appendChild(setupCard);
@@ -249,24 +343,54 @@ export function initChatHistory() {
             });
         }
     } else {
-        appendMessage("system", "Welcome to the AI System Architect! Configure your LLM under Settings, click a template shortcut below, or ask a question about your architecture.");
+        appendMessage("system", `Ready with ${getCurrentProviderDisplay()}. Ask a question or use a quick prompt.`);
     }
 }
 
 export function populateAIChips() {
-    if (!aiQuickTemplates) return;
+    if (!aiQuickTemplates || !aiOverflowTemplates) return;
     aiQuickTemplates.innerHTML = "";
-    Object.entries(AI_PROMPTS).forEach(([key, info]) => {
-        const chip = document.createElement("button");
-        chip.className = "ai-chip";
-        chip.textContent = info.title;
-        chip.addEventListener("click", () => {
-            const mdContext = generateKnowledgePackMarkdown();
-            const compiledPrompt = info.prompt(mdContext);
-            sendChatMessage(compiledPrompt, `Shortcut: ${info.title}`);
-        });
-        aiQuickTemplates.appendChild(chip);
+    aiOverflowTemplates.innerHTML = "";
+    const orderedPrompts = PROMPT_ORDER
+        .map(key => [key, AI_PROMPTS[key]])
+        .filter(([, info]) => !!info);
+    let overflowIndex = 0;
+
+    orderedPrompts.forEach(([key, info]) => {
+        const chip = buildPromptChip(info, () => {
+            showPromptCloud = false;
+            renderPromptToggleState();
+        }, !PRIMARY_PROMPT_KEYS.includes(key) ? overflowIndex : null);
+        if (PRIMARY_PROMPT_KEYS.includes(key)) {
+            aiQuickTemplates.appendChild(chip);
+        } else {
+            aiOverflowTemplates.appendChild(chip);
+            overflowIndex += 1;
+        }
     });
+
+    if (aiToolsToggle) {
+        aiToolsToggle.style.display = orderedPrompts.length > PRIMARY_PROMPT_KEYS.length ? "inline-flex" : "none";
+    }
+    renderPromptToggleState();
+}
+
+function buildPromptChip(info, afterClick = null, overflowIndex = null) {
+    const chip = document.createElement("button");
+    chip.className = "ai-chip";
+    if (overflowIndex !== null) {
+        chip.classList.add("ai-chip-overflow");
+        chip.style.setProperty("--fan-delay", String(overflowIndex));
+    }
+    chip.type = "button";
+    chip.textContent = info.title;
+    chip.addEventListener("click", () => {
+        const mdContext = generateKnowledgePackMarkdown();
+        const compiledPrompt = info.prompt(mdContext);
+        if (afterClick) afterClick();
+        sendChatMessage(compiledPrompt, info.shortQuery || info.title);
+    });
+    return chip;
 }
 
 async function sendChatMessage(promptText, displayQuery = null) {

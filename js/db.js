@@ -80,7 +80,7 @@ export function saveAuditRun(batchLog) {
         const pack = generateKnowledgePackJSON();
         const version = batchLog.version || "1.0";
 
-        const projId = currentProject ? currentProject.id : "trace-sample";
+        const projId = currentProject ? currentProject.id : "demo-sample";
 
         const auditRun = {
             id: runId,

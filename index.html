@@ -3,8 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Architecture Workbench</title>
-    <meta name="description" content="Interactive architecture diagram, flow simulator, and local-first architecture history log analyzer.">
+    <title>ArchBench</title>
+    <meta name="description" content="Local-first architecture diagrams, simulations, audit history, and BYO-LLM analysis in a static vanilla JS app.">
+    <meta name="archbench-env" content="auto">
+    <meta name="theme-color" content="#0a0f1c">
+    <meta property="og:title" content="ArchBench">
+    <meta property="og:description" content="Interactive architecture diagrams, simulations, and browser-local audit tooling with no backend required.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="ArchBench">
+    <meta name="twitter:description" content="Interactive architecture diagrams, simulations, and browser-local audit tooling with no backend required.">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -19,36 +28,39 @@
             <span class="logo-mark" style="background: linear-gradient(135deg, hsl(270,70%,60%), hsl(310,65%,62%));">A</span>
             <span class="logo-label">ArchBench <span class="logo-sub">Workbench</span></span>
             <span class="tb-divider"></span>
-            <div class="project-selector-container">
-                <button class="tb-btn btn-project-selector" id="btn-project-selector" title="Select or manage architecture projects">
-                    <span id="current-project-title">TRACE Product Identity Infrastructure</span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                </button>
-                <div class="project-dropdown" id="project-dropdown">
-                    <div class="dropdown-section">
-                        <div class="dropdown-header">Projects</div>
-                        <div class="project-list" id="project-list">
-                            <!-- Populated by JS -->
+            <div class="project-toolbar">
+                <div class="project-selector-container">
+                    <button class="tb-btn btn-project-selector" id="btn-project-selector" title="Browse existing architecture projects">
+                        <span class="project-selector-label">Projects</span>
+                        <span id="current-project-title">ArcBench Architecture</span>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="project-dropdown" id="project-dropdown">
+                        <div class="dropdown-section">
+                            <div class="dropdown-header">Projects</div>
+                            <div class="project-list" id="project-list">
+                                <!-- Populated by JS -->
+                            </div>
                         </div>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item btn-action" id="dropdown-btn-edit">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+                            <span>Edit Active Project</span>
+                        </button>
+                        <button class="dropdown-item btn-action" id="dropdown-btn-export">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            <span>Export Active Project</span>
+                        </button>
                     </div>
-                    <div class="dropdown-divider"></div>
-                    <button class="dropdown-item btn-action" id="dropdown-btn-create">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        <span>Create New Project</span>
-                    </button>
-                    <button class="dropdown-item btn-action" id="dropdown-btn-edit">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
-                        <span>Edit Active Project</span>
-                    </button>
-                    <button class="dropdown-item btn-action" id="dropdown-btn-import">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                        <span>Import Project (.md / .json)</span>
-                    </button>
-                    <button class="dropdown-item btn-action" id="dropdown-btn-export">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        <span>Export Project (.md)</span>
-                    </button>
                 </div>
+                <button class="tb-btn project-action-btn" id="btn-project-new" title="Create a new project">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>New</span>
+                </button>
+                <button class="tb-btn project-action-btn" id="btn-project-import" title="Import a project file">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>Import</span>
+                </button>
             </div>
         </div>
         <div class="topbar-center">
@@ -83,7 +95,7 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
                 <span>AI & Export</span>
             </button>
-            <span class="badge">Workbench v0.1</span>
+            <span class="badge">Static v0.1</span>
         </div>
     </header>
 
@@ -200,7 +212,7 @@
         <!-- 3. AI Analysis Panel -->
         <div class="fp-tab-panel active" id="panel-ai">
             <div class="ai-chat-header">
-                <span class="ai-chat-title">AI System Architect</span>
+                <span class="ai-model-badge" id="ai-model-badge">No provider configured</span>
                 <div class="ai-chat-header-actions">
                     <button class="ai-header-btn" id="btn-ai-settings" title="AI Settings">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -217,12 +229,28 @@
                 <!-- Injected dynamically by JS -->
             </div>
 
-            <div class="ai-quick-templates" id="ai-quick-templates">
-                <!-- Chips populated by JS -->
+            <div class="ai-tools-panel" id="ai-tools-panel">
+                <div class="ai-tools-row">
+                    <div class="ai-tools-primary" id="ai-quick-templates">
+                        <!-- Primary prompt pills populated by JS -->
+                    </div>
+                    <div class="ai-tools-anchor">
+                        <button class="ai-tools-toggle" id="ai-tools-toggle" type="button" title="Show more prompts" aria-expanded="false" aria-controls="ai-tools-popover">
+                            <span class="ai-tools-toggle-glyph" aria-hidden="true">+</span>
+                        </button>
+                        <div class="ai-tools-popover" id="ai-tools-popover" aria-hidden="true">
+                            <div class="ai-tools-popover-grid" id="ai-overflow-templates">
+                                <!-- Overflow prompt pills populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="ai-input-container">
-                <textarea class="ai-chat-input" id="ai-chat-input" placeholder="Ask AI... (Shift+Enter for new line, click chips to inject architecture specs)"></textarea>
+                <div class="ai-composer">
+                    <textarea class="ai-chat-input" id="ai-chat-input" placeholder="Ask about this architecture. Shift+Enter for a new line."></textarea>
+                </div>
                 <button type="button" class="ai-send-btn" id="btn-ai-send" title="Send Message">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
@@ -267,7 +295,7 @@
                         <div class="form-group">
                             <label class="form-label">OpenAI API Key</label>
                             <input class="form-input" type="password" id="ai-openai-key" placeholder="sk-proj-...">
-                            <span class="form-note">Your API Key is sent directly to OpenAI from your browser.</span>
+                            <span class="form-note">Your API key is stored in this browser and sent directly from the client.</span>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Model Name</label>
@@ -304,6 +332,10 @@
                         </label>
                         <span class="form-note">Automatically includes your complete architecture specification context on prompt template queries.</span>
                     </div>
+
+                    <p class="form-note" style="margin-top: 12px;">
+                        ArchBench does not use accounts or a backend in this release. Project data stays in local storage and IndexedDB on this device.
+                    </p>
 
                     <button class="btn-primary" id="btn-save-settings" style="width: 100%; margin-top: 12px; font-weight:600;">
                         Save Settings
@@ -545,7 +577,7 @@ Version: 1.0
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="samples/trace.js"></script>
+    <script src="samples/demo.js"></script>
     <script type="module" src="graph.js?v=1.0.1"></script>
 </body>
 </html>

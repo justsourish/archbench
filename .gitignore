@@ -1,6 +1,11 @@
 # OS metadata
 .DS_Store
 Thumbs.db
+ref/
+screenshots/
+Screenshot *.png
+Screenshot*.png
+*.heic
 
 # Editors
 .vscode/

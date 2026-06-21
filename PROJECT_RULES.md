@@ -1,6 +1,6 @@
 # ArcBench Project Architecture Rules
 
-This document specifies the rules and conventions that external AI agents and developers must follow when modifying the system architecture file (`architecture.md` / `samples/trace.md`).
+This document specifies the rules and conventions that external AI agents and developers must follow when modifying the system architecture file (`architecture.md` / `samples/demo.md`).
 
 ---
 
