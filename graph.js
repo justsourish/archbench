@@ -11,7 +11,7 @@ import { parseMarkdownToProject, exportProjectToMarkdown, validateProjectData } 
 import { calculateArchitectureQualityScore, calculateDatabaseDependencyScore } from "./js/metrics.js";
 import { generateArchitectureHealthReport } from "./js/reports/health-engine.js";
 import { generateExecutionLogJSON, generateExecutionLogMarkdown, generateKnowledgePackJSON, generateKnowledgePackMarkdown } from "./js/reports/generators.js";
-import { toggleLiveWatch } from "./js/live-watch.js";
+import { toggleLiveWatch, startLiveWatch } from "./js/live-watch.js";
 import { initTerminalOnce } from "./js/terminal.js";
 import { localHistoryCache, initDB, reloadHistoryCache, saveAuditRun, deleteAuditRun, clearProjectHistoryFromDB } from "./js/db.js";
 import { initAIEngine, populateAIGrid } from "./js/ai-engine.js";
@@ -1316,6 +1316,8 @@ export { drawConnections, panToNode, nodeEls };
     const wizardDropzone = document.getElementById("wizard-dropzone");
 
     let wizardScannedProjectSpec = null;
+    let scannedDirectoryHandle = null;
+    let scaffoldNeeded = false;
 
     function openWizardModal() {
         if (wizardAnalyzeTitle) wizardAnalyzeTitle.value = "";
@@ -1362,11 +1364,315 @@ export { drawConnections, panToNode, nodeEls };
         btn.addEventListener("click", () => showWizardStep(1));
     });
 
-    if (wizardBtnBrowseFolder && wizardFolderInput) {
-        wizardBtnBrowseFolder.addEventListener("click", () => wizardFolderInput.click());
+    if (wizardBtnBrowseFolder) {
+        wizardBtnBrowseFolder.addEventListener("click", async () => {
+            if (window.showDirectoryPicker) {
+                try {
+                    const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+                    await processDirectoryOnboarding(dirHandle);
+                } catch (err) {
+                    console.warn("Directory selection cancelled or failed, falling back to legacy input:", err);
+                    if (wizardFolderInput) wizardFolderInput.click();
+                }
+            } else {
+                if (wizardFolderInput) wizardFolderInput.click();
+            }
+        });
     }
     if (wizardBtnBrowseFile && wizardFileInput) {
         wizardBtnBrowseFile.addEventListener("click", () => wizardFileInput.click());
+    }
+
+    // Delegated click handler for dynamically created elements inside the onboarding wizard status container
+    document.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        
+        if (btn.id === "btn-copy-onboarding-prompt") {
+            const promptText = `You are a senior system architect. I have initialized an ArchBench workspace. Analyze my codebase files and write the architecture specification directly into architecture.md in my root folder, following the format rules in PROJECT_RULES.md. Do not output explanations, only write the markdown code.`;
+            copyToClipboard(promptText, "🤖 LLM System Prompt copied to clipboard! Paste it into your AI workspace.");
+        } else if (btn.id === "btn-download-scaffold-arch") {
+            if (wizardScannedProjectSpec) {
+                const mdContent = exportProjectToMarkdown(wizardScannedProjectSpec);
+                downloadFile(mdContent, "architecture.md", "text/markdown");
+                showToast("📥 Saved architecture.md starter template!");
+            }
+        } else if (btn.id === "btn-download-scaffold-rules") {
+            if (wizardScannedProjectSpec) {
+                const rulesContent = generateProjectRulesContent(wizardScannedProjectSpec.title);
+                downloadFile(rulesContent, "PROJECT_RULES.md", "text/markdown");
+                showToast("📥 Saved PROJECT_RULES.md prompt rules!");
+            }
+        }
+    });
+
+    function generateProjectRulesContent(projectTitle) {
+        return `# ArchBench Project Rules & Prompts for '${projectTitle}'
+
+This workspace uses [Architecture Workbench (ArchBench)](https://archbench.netlify.app/) to visualize the system diagram, simulate flows, and track changes.
+
+## Single Source of Truth
+* The file \`architecture.md\` is the single source of truth for the system architecture.
+* Any changes to \`architecture.md\` will be automatically picked up and hot-reloaded by the ArchBench visual dashboard.
+
+## LLM System Instructions
+When using an LLM agent (like Gemini, OpenAI, Claude, or a workspace copilot) to update the system structure, prompt it with the following:
+
+\`\`\`markdown
+You are a senior systems architect. Your task is to analyze the codebase and write/update the \`architecture.md\` specification file.
+
+Format rules:
+1. Every component must be defined in the \`## Nodes\` section.
+   Use the categories: "Entry Point", "Service", "Infrastructure", or "Boundary".
+2. Connections must be defined in the \`## Connections\` section as:
+   * [from_node_id, to_node_id, interaction_label, type]
+   Where type is "request", "data", or "future".
+3. Simulation pathways must be detailed in the \`## Flows\` section.
+
+Ensure you update only the \`architecture.md\` file when modifying the layout. Do not change business logic or output other file formats.
+\`\`\`
+`;
+    }
+
+    async function writeScaffoldFiles(dirHandle, spec) {
+        try {
+            const mdContent = exportProjectToMarkdown(spec);
+            const specHandle = await dirHandle.getFileHandle("architecture.md", { create: true });
+            const specWritable = await specHandle.createWritable();
+            await specWritable.write(mdContent);
+            await specWritable.close();
+
+            const rulesContent = generateProjectRulesContent(spec.title);
+            const rulesHandle = await dirHandle.getFileHandle("PROJECT_RULES.md", { create: true });
+            const rulesWritable = await rulesHandle.createWritable();
+            await rulesWritable.write(rulesContent);
+            await rulesWritable.close();
+        } catch (err) {
+            console.error("Failed to write scaffold files to local directory:", err);
+            showToast("⚠️ Failed to write architecture files directly. Sandbox permission denied.");
+        }
+    }
+
+    async function processDirectoryOnboarding(dirHandle) {
+        if (wizardScanStatus) {
+            wizardScanStatus.style.display = "block";
+            wizardScanStatus.innerHTML = "<span style='color: hsl(200, 85%, 75%);'>Scanning project files...</span>";
+        }
+        
+        scannedDirectoryHandle = dirHandle;
+        scaffoldNeeded = false;
+        wizardScannedProjectSpec = null;
+        
+        try {
+            let specFileHandle = null;
+            // Scan top level for architecture.md
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === "file" && entry.name.toLowerCase() === "architecture.md") {
+                    specFileHandle = entry;
+                    break;
+                }
+            }
+            
+            if (specFileHandle) {
+                const file = await specFileHandle.getFile();
+                const text = await file.text();
+                const parsed = parseMarkdownToProject(text);
+                validateProjectData(parsed);
+                
+                wizardScannedProjectSpec = parsed;
+                if (wizardAnalyzeTitle) wizardAnalyzeTitle.value = parsed.title;
+                
+                if (wizardScanStatus) {
+                    wizardScanStatus.innerHTML = `<span style="color: hsl(150, 75%, 70%); font-weight:600;">✅ Found architecture.md!</span><br>` +
+                        `<strong>Title:</strong> ${parsed.title}<br>` +
+                        `<strong>Version:</strong> ${parsed.version}<br>` +
+                        `<strong>Components:</strong> ${parsed.nodes.length} nodes, ${parsed.connections.length} connections.<br>` +
+                        `<span style="color: hsl(200, 85%, 75%); font-size:10px;">Live Watch will auto-enable on load.</span>`;
+                }
+                if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = false;
+            } else {
+                // Heuristic scan directory folders recursively
+                let hasClient = false, hasApi = false, hasDb = false, hasAuth = false, hasWorker = false;
+                let detectedFolders = [];
+                const IGNORE_DIRS = new Set(["node_modules", ".git", ".github", "dist", "build", "target", "out", ".next", "cache", "tmp", "vendor"]);
+
+                async function traverse(handle, currentDepth = 1) {
+                    if (currentDepth > 3) return;
+                    try {
+                        for await (const entry of handle.values()) {
+                            if (entry.kind === "directory") {
+                                const name = entry.name.toLowerCase();
+                                if (IGNORE_DIRS.has(name)) continue;
+
+                                let matched = false;
+                                if (name.includes("auth")) { hasAuth = true; matched = true; }
+                                if (name.includes("worker") || name.includes("queue") || name.includes("job")) { hasWorker = true; matched = true; }
+                                if (name.includes("db") || name.includes("database") || name.includes("postgres") || name.includes("mysql") || name.includes("redis") || name.includes("mongo")) { hasDb = true; matched = true; }
+                                if (name.includes("client") || name.includes("frontend") || name.includes("web") || name.includes("app") || name.includes("ui") || name.includes("pages")) { hasClient = true; matched = true; }
+                                if (name.includes("api") || name.includes("backend") || name.includes("server") || name.includes("controller") || name.includes("routes")) { hasApi = true; matched = true; }
+
+                                if (matched || currentDepth === 1) {
+                                    if (detectedFolders.length < 10) {
+                                        detectedFolders.push(entry.name);
+                                    }
+                                }
+                                await traverse(entry, currentDepth + 1);
+                            } else if (entry.kind === "file") {
+                                const name = entry.name.toLowerCase();
+                                if (name === "docker-compose.yml" || name === "docker-compose.yaml") {
+                                    hasDb = true;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Traverse permission or access error on sub-handle:", e);
+                    }
+                }
+                
+                await traverse(dirHandle, 1);
+                
+                if (wizardAnalyzeTitle) {
+                    wizardAnalyzeTitle.value = dirHandle.name.split(/[_-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                } else if (wizardAnalyzeTitle && !wizardAnalyzeTitle.value) {
+                    wizardAnalyzeTitle.value = "Workspace Scaffold";
+                }
+                
+                const nodesList = [];
+                const connectionsList = [];
+                const flowsList = [];
+                
+                if (hasClient || (!hasApi && !hasDb)) {
+                    nodesList.push({
+                        id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250,
+                        desc: "Discovered client application folder."
+                    });
+                }
+                if (hasAuth) {
+                    nodesList.push({
+                        id: "auth", category: "Service", title: "Auth Service", icon: "🔒", color: "hsl(280,85%,75%)", x: 550, y: 550,
+                        desc: "Discovered authentication service folder."
+                    });
+                }
+                if (hasApi || hasWorker || hasDb) {
+                    nodesList.push({
+                        id: "api", category: "Service", title: "Backend API", icon: "⚙️", color: "hsl(200,80%,58%)", x: 550, y: 250,
+                        desc: "Discovered core api controllers."
+                    });
+                }
+                if (hasWorker) {
+                    nodesList.push({
+                        id: "worker", category: "Service", title: "Job Processor", icon: "📨", color: "hsl(28,85%,58%)", x: 800, y: 550,
+                        desc: "Discovered worker task queues."
+                    });
+                }
+                if (hasDb) {
+                    nodesList.push({
+                        id: "db", category: "Infrastructure", title: "Database Store", icon: "🗄️", color: "hsl(170,70%,50%)", x: 800, y: 250,
+                        desc: "Discovered database storage config."
+                    });
+                }
+                
+                if (nodesList.length === 0) {
+                    nodesList.push(
+                        { id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250, desc: "Default client interface." },
+                        { id: "api", category: "Service", title: "Core Service", icon: "⚙️", color: "hsl(200,80%,58%)", x: 750, y: 250, desc: "Default backend API service." }
+                    );
+                }
+                
+                const nodeIds = nodesList.map(n => n.id);
+                if (nodeIds.includes("client") && nodeIds.includes("api")) {
+                    connectionsList.push(["client", "api", "HTTPS Request", "request"]);
+                }
+                if (nodeIds.includes("api") && nodeIds.includes("auth")) {
+                    connectionsList.push(["api", "auth", "Verify Tokens", "request"]);
+                }
+                if (nodeIds.includes("api") && nodeIds.includes("worker")) {
+                    connectionsList.push(["api", "worker", "Queue Task", "data"]);
+                }
+                if (nodeIds.includes("api") && nodeIds.includes("db")) {
+                    connectionsList.push(["api", "db", "Read/Write SQL", "data"]);
+                }
+                if (nodeIds.includes("worker") && nodeIds.includes("db")) {
+                    connectionsList.push(["worker", "db", "Update Job Status", "data"]);
+                }
+                
+                if (connectionsList.length === 0 && nodeIds.length >= 2) {
+                    connectionsList.push([nodeIds[0], nodeIds[1], "Connects To", "request"]);
+                }
+                
+                const flowSteps = nodesList.map(n => ({
+                    node: n.id,
+                    label: `Process at ${n.title}`,
+                    detail: `Scaffolded execution step at ${n.title}.`,
+                    data: `{"scaffold": true}`
+                }));
+                
+                flowsList.push({
+                    id: "main_scaffold_flow",
+                    title: "Scaffold Demo Flow",
+                    subtitle: "Automatically generated walk-through simulation",
+                    steps: flowSteps
+                });
+                
+                const spec = {
+                    title: wizardAnalyzeTitle.value.trim() || dirHandle.name,
+                    version: "1.0",
+                    nodes: nodesList,
+                    connections: connectionsList,
+                    flows: flowsList
+                };
+                
+                wizardScannedProjectSpec = spec;
+                scaffoldNeeded = true;
+                
+                if (wizardScanStatus) {
+                    let detectedText = [];
+                    if (hasClient) detectedText.push("Frontend UI");
+                    if (hasApi) detectedText.push("API Backend");
+                    if (hasDb) detectedText.push("Database");
+                    if (hasAuth) detectedText.push("Auth");
+                    if (hasWorker) detectedText.push("Worker Thread");
+                    
+                    if (detectedText.length === 0) detectedText.push("Generic project folder");
+                    
+                    let foldersHtml = "";
+                    if (detectedFolders.length > 0) {
+                        foldersHtml = `<div style="margin-top: 4px; opacity: 0.8; font-size: 10px;">Scanned directories: <code>${detectedFolders.join(", ")}</code></div>`;
+                    }
+                    
+                    wizardScanStatus.innerHTML = 
+                        `<div style="display:flex; flex-direction:column; gap:8px;">` +
+                            `<div>` +
+                                `<span style="color: hsl(32, 85%, 58%); font-weight:600;">⚠️ architecture.md not found in directory.</span><br>` +
+                                `Detected components: <strong>${detectedText.join(", ")}</strong>.<br>` +
+                                `${foldersHtml}` +
+                            `</div>` +
+                            `<div style="padding: 10px; border-radius: 8px; background: rgba(180, 130, 255, 0.05); border: 1px solid rgba(180, 130, 255, 0.15); margin-top: 4px;">` +
+                                `<div style="font-weight: 700; font-size: 10px; color: hsl(280, 85%, 75%); margin-bottom: 4px;">📂 DIRECT SYNC ONBOARDING</div>` +
+                                `<div style="font-size: 10px; color: var(--text-secondary); line-height: 1.4;">` +
+                                    `Clicking <strong>Load Project</strong> will write <code>architecture.md</code> and <code>PROJECT_RULES.md</code> directly into your project root and start <strong>Live Watch</strong>.` +
+                                `</div>` +
+                            `</div>` +
+                            `<div style="padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">` +
+                                `<div style="font-weight: 700; font-size: 10px; color: hsl(280, 85%, 75%); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">` +
+                                    `<span>🤖 LLM PROMPT FOR ARCHITECTURE SPEC</span>` +
+                                    `<button id="btn-copy-onboarding-prompt" style="background: rgba(180, 130, 255, 0.2); border: 1px solid rgba(180, 130, 255, 0.4); color: hsl(280, 85%, 80%); padding: 2px 6px; font-size: 9px; cursor: pointer; border-radius: 4px; font-family: inherit; font-weight: 600;">Copy Prompt</button>` +
+                                `</div>` +
+                                `<div style="font-size: 10px; color: var(--text-secondary); line-height: 1.4; font-family: monospace; white-space: pre-wrap; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; overflow-y: auto; max-height: 80px;">` +
+                                    `You are a senior system architect. I have initialized an ArchBench workspace. Analyze my codebase files and write the architecture specification directly into architecture.md in my root folder, following the format rules in PROJECT_RULES.md. Do not output explanations, only write the markdown code.` +
+                                `</div>` +
+                            `</div>` +
+                        `</div>`;
+                }
+                if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = false;
+            }
+        } catch (err) {
+            console.error("Directory scan error:", err);
+            if (wizardScanStatus) {
+                wizardScanStatus.innerHTML = `<span style="color: hsl(0, 72%, 62%); font-weight:600;">❌ Directory onboarding failed:</span><br>` +
+                    `<span style="font-size:10px; font-family:monospace; opacity:0.8;">${err.message}</span>`;
+            }
+        }
     }
 
     function handleScannedFiles(files, isFolder) {
@@ -1546,9 +1852,38 @@ export { drawConnections, panToNode, nodeEls };
                 
                 if (detectedText.length === 0) detectedText.push("Generic project directory");
 
-                wizardScanStatus.innerHTML = `<span style="color: hsl(32, 85%, 58%); font-weight:600;">⚠️ architecture.md not found.</span><br>` +
-                    `Detected structure components: <strong>${detectedText.join(", ")}</strong>.<br>` +
-                    `We scaffolded ${nodesList.length} nodes and ${connectionsList.length} connections to match. Ready to load!`;
+                let foldersHtml = "";
+                if (folderName) {
+                    foldersHtml = `<div style="margin-top:4px; opacity:0.8; font-size:10px;">Scanned root: <code>${folderName}</code></div>`;
+                }
+
+                wizardScanStatus.innerHTML = 
+                    `<div style="display:flex; flex-direction:column; gap:8px;">` +
+                        `<div>` +
+                            `<span style="color: hsl(32, 85%, 58%); font-weight:600;">⚠️ architecture.md not found in directory.</span><br>` +
+                            `Detected components: <strong>${detectedText.join(", ")}</strong>.<br>` +
+                            `${foldersHtml}` +
+                        `</div>` +
+                        `<div style="padding: 10px; border-radius: 8px; background: rgba(255,160,0,0.05); border: 1px solid rgba(255,160,0,0.15); margin-top: 4px;">` +
+                            `<div style="font-weight: 700; font-size: 10px; color: hsl(38, 95%, 65%); margin-bottom: 6px;">📥 DOWNLOAD STARTER FILES</div>` +
+                            `<div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">` +
+                                `Since this browser environment doesn't allow writing directly to local folders, click below to download your starter files. Place them in your project root!` +
+                            `</div>` +
+                            `<div style="display: flex; gap: 8px;">` +
+                                `<button id="btn-download-scaffold-arch" style="background: rgba(255,160,0,0.15); border: 1px solid rgba(255,160,0,0.3); color: hsl(38, 95%, 75%); padding: 4px 8px; font-size: 10px; cursor: pointer; border-radius: 4px; font-family: inherit; font-weight: 600;">Download architecture.md</button>` +
+                                `<button id="btn-download-scaffold-rules" style="background: rgba(255,160,0,0.15); border: 1px solid rgba(255,160,0,0.3); color: hsl(38, 95%, 75%); padding: 4px 8px; font-size: 10px; cursor: pointer; border-radius: 4px; font-family: inherit; font-weight: 600;">Download PROJECT_RULES.md</button>` +
+                            `</div>` +
+                        `</div>` +
+                        `<div style="padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);">` +
+                            `<div style="font-weight: 700; font-size: 10px; color: hsl(280, 85%, 75%); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">` +
+                                `<span>🤖 LLM PROMPT FOR ARCHITECTURE SPEC</span>` +
+                                `<button id="btn-copy-onboarding-prompt" style="background: rgba(180, 130, 255, 0.2); border: 1px solid rgba(180, 130, 255, 0.4); color: hsl(280, 85%, 80%); padding: 2px 6px; font-size: 9px; cursor: pointer; border-radius: 4px; font-family: inherit; font-weight: 600;">Copy Prompt</button>` +
+                            `</div>` +
+                            `<div style="font-size: 10px; color: var(--text-secondary); line-height: 1.4; font-family: monospace; white-space: pre-wrap; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; overflow-y: auto; max-height: 80px;">` +
+                                `You are a senior system architect. I have initialized an ArchBench workspace. Analyze my codebase files and write the architecture specification directly into architecture.md in my root folder, following the format rules in PROJECT_RULES.md. Do not output explanations, only write the markdown code.` +
+                            `</div>` +
+                        `</div>` +
+                    `</div>`;
             }
             if (wizardBtnLoadAnalyzed) wizardBtnLoadAnalyzed.disabled = false;
         }
@@ -1597,7 +1932,7 @@ export { drawConnections, panToNode, nodeEls };
     }
 
     if (wizardBtnLoadAnalyzed) {
-        wizardBtnLoadAnalyzed.addEventListener("click", () => {
+        wizardBtnLoadAnalyzed.addEventListener("click", async () => {
             if (!wizardScannedProjectSpec) return;
             
             const titleVal = wizardAnalyzeTitle.value.trim();
@@ -1610,9 +1945,18 @@ export { drawConnections, panToNode, nodeEls };
             wizardScannedProjectSpec.id = newId;
             custom.push(wizardScannedProjectSpec);
             saveCustomProjects(custom);
+
+            if (scaffoldNeeded && scannedDirectoryHandle) {
+                await writeScaffoldFiles(scannedDirectoryHandle, wizardScannedProjectSpec);
+            }
+            
             loadProject(wizardScannedProjectSpec);
             closeWizardModal();
             showToast(`Project '${wizardScannedProjectSpec.title}' loaded and initialized!`);
+            
+            if (scannedDirectoryHandle) {
+                startLiveWatch(scannedDirectoryHandle);
+            }
         });
     }
 

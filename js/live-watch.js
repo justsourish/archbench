@@ -7,6 +7,7 @@ let isLiveWatching = false;
 let liveWatchInterval = null;
 let lastWatchText = "";
 let watchFileHandle = null;
+let watchDirectoryHandle = null;
 
 const btnLiveWatch = document.getElementById("btn-live-watch");
 const liveWatchText = document.getElementById("live-watch-text");
@@ -23,12 +24,27 @@ export async function toggleLiveWatch() {
     }
 }
 
-export async function startLiveWatch() {
+export async function startLiveWatch(dirHandle = null) {
     if (IS_HOSTED) {
         showToast("Live Watch is available in local mode only.");
         return;
     }
-    if (window.showOpenFilePicker) {
+
+    if (dirHandle) {
+        watchDirectoryHandle = dirHandle;
+        watchFileHandle = null;
+        try {
+            const fileHandle = await dirHandle.getFileHandle("architecture.md");
+            const file = await fileHandle.getFile();
+            lastWatchText = await file.text();
+            showToast(`👁️ Watching local directory spec: ${dirHandle.name}/architecture.md`);
+        } catch (err) {
+            console.warn("Directory architecture.md not found or inaccessible on start:", err);
+            watchFileHandle = null;
+            lastWatchText = "";
+            showToast(`👁️ Watching directory: ${dirHandle.name} (scaffolding...)`);
+        }
+    } else if (window.showOpenFilePicker) {
         try {
             const [handle] = await window.showOpenFilePicker({
                 types: [{
@@ -38,12 +54,14 @@ export async function startLiveWatch() {
                 excludeAcceptAllOption: true
             });
             watchFileHandle = handle;
+            watchDirectoryHandle = null;
             const file = await handle.getFile();
             lastWatchText = await file.text();
             showToast(`👁️ Watching local file: ${file.name}`);
         } catch (err) {
             console.warn("File picker cancelled or failed, falling back to server polling:", err);
             watchFileHandle = null;
+            watchDirectoryHandle = null;
             showToast("👁️ Watching server endpoint: architecture.md");
         }
     } else {
@@ -58,7 +76,15 @@ export async function startLiveWatch() {
         if (!isLiveWatching) return;
         try {
             let currentText = "";
-            if (watchFileHandle) {
+            if (watchDirectoryHandle) {
+                try {
+                    const fileHandle = await watchDirectoryHandle.getFileHandle("architecture.md");
+                    const file = await fileHandle.getFile();
+                    currentText = await file.text();
+                } catch (e) {
+                    currentText = ""; // File may not exist yet or still writing
+                }
+            } else if (watchFileHandle) {
                 const file = await watchFileHandle.getFile();
                 currentText = await file.text();
             } else {
@@ -91,6 +117,7 @@ export function stopLiveWatch() {
         liveWatchInterval = null;
     }
     watchFileHandle = null;
+    watchDirectoryHandle = null;
     if (btnLiveWatch) btnLiveWatch.classList.remove("active");
     if (liveWatchText) liveWatchText.textContent = "Live Watch";
     showToast("Live Watch disabled.");
