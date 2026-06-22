@@ -40,8 +40,17 @@ export const Sidebar: React.FC = () => {
     } = useProjectStore();
 
     // Layout states
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [dockRight, setDockRight] = useState(true);
+
+    const handleTabClick = (tabId: string) => {
+        if (sidebarTab === tabId && !collapsed) {
+            setCollapsed(true);
+        } else {
+            setSidebarTab(tabId);
+            setCollapsed(false);
+        }
+    };
 
     // Automatically expand sidebar and set tab when a flow is activated
     useEffect(() => {
@@ -746,29 +755,40 @@ export const Sidebar: React.FC = () => {
 
             {/* Tab buttons activity bar */}
             <div className="fp-tabs" id="fp-tabs">
-                <button className={`fp-tab ${sidebarTab === 'ai' ? 'active' : ''}`} onClick={() => { setSidebarTab('ai'); setCollapsed(false); }} title="AI System Architect">
+                <button className={`fp-tab ${sidebarTab === 'ai' ? 'active' : ''}`} onClick={() => handleTabClick('ai')} title="AI System Architect">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v2"/><path d="M15 1v2"/><path d="M9 21v2"/><path d="M15 21v2"/><path d="M1 9h2"/><path d="M1 15h2"/><path d="M21 9h2"/><path d="M21 15h2"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'simulator' ? 'active' : ''}`} onClick={() => { setSidebarTab('simulator'); setCollapsed(false); }} title="Trace Flow Simulator">
+                <button className={`fp-tab ${sidebarTab === 'simulator' ? 'active' : ''}`} onClick={() => handleTabClick('simulator')} title="Trace Flow Simulator">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'batch' ? 'active' : ''}`} onClick={() => { setSidebarTab('batch'); setCollapsed(false); }} title="Flow Checklist & Audit">
+                <button className={`fp-tab ${sidebarTab === 'batch' ? 'active' : ''}`} onClick={() => handleTabClick('batch')} title="Flow Checklist & Audit">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'log' ? 'active' : ''}`} onClick={() => { setSidebarTab('log'); setCollapsed(false); }} title="Simulation Execution Log">
+                <button className={`fp-tab ${sidebarTab === 'log' ? 'active' : ''}`} onClick={() => handleTabClick('log')} title="Simulation Execution Log">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'health' ? 'active' : ''}`} onClick={() => { setSidebarTab('health'); setCollapsed(false); }} title="Architecture Health Report">
+                <button className={`fp-tab ${sidebarTab === 'health' ? 'active' : ''}`} onClick={() => handleTabClick('health')} title="Architecture Health Report">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'history' ? 'active' : ''}`} onClick={() => { setSidebarTab('history'); setCollapsed(false); }} title="Simulation History Index">
+                <button className={`fp-tab ${sidebarTab === 'history' ? 'active' : ''}`} onClick={() => handleTabClick('history')} title="Simulation History Index">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'pack' ? 'active' : ''}`} onClick={() => { setSidebarTab('pack'); setCollapsed(false); }} title="Markdown Knowledge Pack">
+                <button className={`fp-tab ${sidebarTab === 'pack' ? 'active' : ''}`} onClick={() => handleTabClick('pack')} title="Markdown Knowledge Pack">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><polygon points="12 22.08 12 12 3 6.92 3 17.08 12 22.08"/><polygon points="12 22.08 12 12 21 6.92 21 17.08 12 22.08"/><polygon points="12 12 3 6.92 12 1.84 21 6.92 12 12"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'terminal' ? 'active' : ''}`} onClick={() => { setSidebarTab('terminal'); setCollapsed(false); }} title="Project Terminal Shell">
+                <button className={`fp-tab ${sidebarTab === 'terminal' ? 'active' : ''}`} onClick={() => handleTabClick('terminal')} title="Project Terminal Shell">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                </button>
+
+                <button 
+                    className="fp-tab fp-tab-toggle" 
+                    style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }} 
+                    onClick={() => setCollapsed(!collapsed)} 
+                    title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: (collapsed !== dockRight) ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <polyline points="15 18 9 12 15 6"/>
+                    </svg>
                 </button>
             </div>
 

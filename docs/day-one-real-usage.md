@@ -34,8 +34,8 @@ The goal of this document is to capture:
 - [ ] Watch Mode Issues
 
 ### P1 – UX Problems
-- [ ] Chat Drawer Toggle
-- [ ] Mobile Drawer Default State
+- [x] Chat Drawer Toggle (DONE)
+- [x] Mobile Drawer Default State (DONE)
 - [ ] Import + Watch Workflow
 - [ ] Live Watch Placement
 - [ ] Add New Workflow
@@ -245,7 +245,7 @@ Changes should update architecture history automatically.
 
 ## P1 – UX Problems
 
-### Chat Drawer Toggle
+### Chat Drawer Toggle [DONE]
 
 **Current:**
 * Hidden
@@ -259,7 +259,7 @@ Changes should update architecture history automatically.
 
 ---
 
-### Mobile Drawer Default State
+### Mobile Drawer Default State [DONE]
 
 **Current:**
 Drawer opens by default.
@@ -417,8 +417,8 @@ Must remain:
 1. Fix flow testing [DONE]
 2. Fix flow loading [DONE]
 3. Improve import/watch workflow
-4. Improve mobile drawer behavior
-5. Improve chat panel controls
+4. Improve mobile drawer behavior [DONE]
+5. Improve chat panel controls [DONE]
 6. Improve initial node layout
 7. Restore data flow visualization
 
