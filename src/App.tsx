@@ -18,6 +18,7 @@ function App() {
     const loadProject = useProjectStore(s => s.loadProject);
     const updateProject = useProjectStore(s => s.updateProject);
     const isTerminalVisible = useProjectStore(s => s.isTerminalVisible);
+    const isSidebarDockedRight = useProjectStore(s => s.isSidebarDockedRight);
 
     const [zoomLabel, setZoomLabel] = useState('50%');
     const [wizardOpen, setWizardOpen] = useState(false);
@@ -88,84 +89,86 @@ function App() {
                     onOpenWizardModal={() => setWizardOpen(true)}
                 />
                 <FlowBar />
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isSidebarDockedRight ? 'row' : 'row-reverse' }}>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
                         <div style={{ flex: 1, position: 'relative' }}>
                             <ReactFlowCanvas setZoomLabel={setZoomLabel} />
+                            
+                            {/* Footer Attribution (placed here so it doesn't overlap the console bottom dock) */}
+                            <footer style={{ 
+                                position: 'absolute',
+                                bottom: '12px',
+                                left: '16px',
+                                zIndex: 10,
+                                fontSize: '9px',
+                                fontWeight: 500,
+                                letterSpacing: '0.5px',
+                                textTransform: 'uppercase',
+                                color: 'rgba(255, 255, 255, 0.35)',
+                                background: 'rgba(10,12,22,0.6)',
+                                backdropFilter: 'blur(12px)',
+                                WebkitBackdropFilter: 'blur(12px)',
+                                padding: '4px 12px',
+                                borderRadius: '100px',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                pointerEvents: 'auto'
+                            }}>
+                                <span style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
+                                    Crafted with 🤍 by{' '}
+                                    <a 
+                                        href="https://github.com/NoisyArchitects" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        style={{ 
+                                            color: 'rgba(255, 255, 255, 0.55)', 
+                                            textDecoration: 'none',
+                                            fontWeight: 600,
+                                            transition: 'color 0.2s ease'
+                                        }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.55)'; }}
+                                    >
+                                        Noisy Architects
+                                    </a>
+                                </span>
+                                <span style={{ color: 'rgba(255, 255, 255, 0.2)' }}>•</span>
+                                <a 
+                                    href="https://www.netlify.com" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    style={{ 
+                                        color: 'rgba(255, 255, 255, 0.45)', 
+                                        textDecoration: 'none', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '5px',
+                                        transition: 'color 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)'; }}
+                                >
+                                    <span style={{ 
+                                        display: 'inline-block',
+                                        width: '6px',
+                                        height: '6px',
+                                        borderRadius: '50%',
+                                        background: '#00C7B7',
+                                        boxShadow: '0 0 8px #00C7B7'
+                                    }} />
+                                    Powered by Netlify
+                                </a>
+                            </footer>
                         </div>
                         {isTerminalVisible && <TerminalConsole />}
                     </div>
                     <Sidebar />
                 </div>
 
-                {/* Footer Attribution */}
-                <footer style={{ 
-                    position: 'fixed',
-                    bottom: '12px',
-                    left: '16px',
-                    zIndex: 100,
-                    fontSize: '10px',
-                    fontWeight: 500,
-                    letterSpacing: '0.5px',
-                    textTransform: 'uppercase',
-                    color: 'rgba(255, 255, 255, 0.35)',
-                    background: 'rgba(10,12,22,0.6)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    padding: '6px 14px',
-                    borderRadius: '100px',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    pointerEvents: 'auto'
-                }}>
-                    <span style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
-                        Crafted with 🤍 by{' '}
-                        <a 
-                            href="https://github.com/NoisyArchitects" 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            style={{ 
-                                color: 'rgba(255, 255, 255, 0.55)', 
-                                textDecoration: 'none',
-                                fontWeight: 600,
-                                transition: 'color 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.55)'; }}
-                        >
-                            Noisy Architects
-                        </a>
-                    </span>
-                    <span style={{ color: 'rgba(255, 255, 255, 0.2)' }}>•</span>
-                    <a 
-                        href="https://www.netlify.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        style={{ 
-                            color: 'rgba(255, 255, 255, 0.45)', 
-                            textDecoration: 'none', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '5px',
-                            transition: 'color 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)'; }}
-                    >
-                        <span style={{ 
-                            display: 'inline-block',
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            background: '#00C7B7',
-                            boxShadow: '0 0 8px #00C7B7'
-                        }} />
-                        Powered by Netlify
-                    </a>
-                </footer>
+
             </div>
 
             <WizardModal isOpen={wizardOpen} onClose={() => setWizardOpen(false)} />

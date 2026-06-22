@@ -18,6 +18,8 @@ interface ProjectState {
     hoveredNodeId: string | null;
     isTerminalVisible: boolean;
     terminalActiveTab: 'trace' | 'shell';
+    isSidebarCollapsed: boolean;
+    isSidebarDockedRight: boolean;
 
     // Actions
     initializeStore: () => void;
@@ -37,6 +39,8 @@ interface ProjectState {
     setHoveredNodeId: (id: string | null) => void;
     setTerminalVisible: (visible: boolean) => void;
     setTerminalActiveTab: (tab: 'trace' | 'shell') => void;
+    setSidebarCollapsed: (collapsed: boolean) => void;
+    setSidebarDockedRight: (dockRight: boolean) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -54,6 +58,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     hoveredNodeId: null,
     isTerminalVisible: true,
     terminalActiveTab: 'trace',
+    isSidebarCollapsed: typeof window !== 'undefined' ? window.innerWidth < 768 : false,
+    isSidebarDockedRight: true,
 
     initializeStore: () => {
         const list = getAvailableProjects();
@@ -160,6 +166,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     setTerminalActiveTab: (tab: 'trace' | 'shell') => {
         set({ terminalActiveTab: tab });
+    },
+
+    setSidebarCollapsed: (collapsed: boolean) => {
+        set({ isSidebarCollapsed: collapsed });
+    },
+
+    setSidebarDockedRight: (dockRight: boolean) => {
+        set({ isSidebarDockedRight: dockRight });
     },
 
     setWatchDirectoryHandle: (handle: any | null) => {

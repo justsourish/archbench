@@ -30,19 +30,19 @@ export const Sidebar: React.FC = () => {
         stepFlow,
         unifiedBatchLog,
         setUnifiedBatchLog,
-        currentProject
+        currentProject,
+        isSidebarCollapsed,
+        isSidebarDockedRight,
+        setSidebarCollapsed,
+        setSidebarDockedRight
     } = useProjectStore();
 
-    // Layout states
-    const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
-    const [dockRight, setDockRight] = useState(true);
-
     const handleTabClick = (tabId: string) => {
-        if (sidebarTab === tabId && !collapsed) {
-            setCollapsed(true);
+        if (sidebarTab === tabId && !isSidebarCollapsed) {
+            setSidebarCollapsed(true);
         } else {
             setSidebarTab(tabId);
-            setCollapsed(false);
+            setSidebarCollapsed(false);
         }
     };
 
@@ -50,9 +50,9 @@ export const Sidebar: React.FC = () => {
     useEffect(() => {
         if (activeFlow) {
             setSidebarTab('simulator');
-            setCollapsed(false);
+            setSidebarCollapsed(false);
         }
-    }, [activeFlow, setSidebarTab]);
+    }, [activeFlow, setSidebarTab, setSidebarCollapsed]);
 
     // AI Tab state
     const [chatHistory, setChatHistory] = useState<Message[]>([]);
@@ -472,7 +472,19 @@ export const Sidebar: React.FC = () => {
     // Logs formatter (moved to bottom TerminalConsole)
 
     return (
-        <div className={`flow-playback ${dockRight ? 'dock-right' : 'dock-left'} ${collapsed ? 'collapsed' : ''}`} id="flow-playback">
+        <div 
+            className={`flow-playback ${isSidebarDockedRight ? 'dock-right' : 'dock-left'} ${isSidebarCollapsed ? 'collapsed' : ''}`} 
+            id="flow-playback"
+            style={{
+                position: 'relative',
+                top: 0,
+                height: '100%',
+                zIndex: 10,
+                width: isSidebarCollapsed ? '48px' : '400px',
+                minWidth: isSidebarCollapsed ? '48px' : '400px',
+                transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+        >
             <div className="fp-header" id="fp-header" style={{ userSelect: 'none' }}>
                 <div className="fp-title-area">
                     <span className="fp-title" id="fp-title">
@@ -495,11 +507,11 @@ export const Sidebar: React.FC = () => {
                     </span>
                 </div>
                 <div className="fp-header-actions">
-                    <button className="fp-action-btn btn-dock" id="fp-dock" title="Cycle Dock Position" onClick={() => setDockRight(!dockRight)}>
+                    <button className="fp-action-btn btn-dock" id="fp-dock" title="Cycle Dock Position" onClick={() => setSidebarDockedRight(!isSidebarDockedRight)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
                     </button>
-                    <button className="fp-action-btn btn-minimize" id="fp-minimize" title={collapsed ? 'Restore Sidebar' : 'Minimize Sidebar'} onClick={() => setCollapsed(!collapsed)}>
-                        <svg className="minimize-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: (collapsed !== dockRight) ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="14 9 11 12 14 15"/></svg>
+                    <button className="fp-action-btn btn-minimize" id="fp-minimize" title={isSidebarCollapsed ? 'Restore Sidebar' : 'Minimize Sidebar'} onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}>
+                        <svg className="minimize-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: (isSidebarCollapsed !== isSidebarDockedRight) ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="14 9 11 12 14 15"/></svg>
                     </button>
                 </div>
             </div>
@@ -530,17 +542,17 @@ export const Sidebar: React.FC = () => {
                 <button 
                     className="fp-tab fp-tab-toggle" 
                     style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }} 
-                    onClick={() => setCollapsed(!collapsed)} 
-                    title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                    onClick={() => setSidebarCollapsed(!isSidebarCollapsed)} 
+                    title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: (collapsed !== dockRight) ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: (isSidebarCollapsed !== isSidebarDockedRight) ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                         <polyline points="15 18 9 12 15 6"/>
                     </svg>
                 </button>
             </div>
 
             {/* Panel containers */}
-            {!collapsed && (
+            {!isSidebarCollapsed && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     
                     {/* ── AI SYSTEM ARCHITECT ───────────────────────────────── */}

@@ -617,7 +617,7 @@ export const TerminalConsole: React.FC = () => {
                                 }}
                                 onClick={(e) => { e.stopPropagation(); setTerminalActiveTab('trace'); }}
                             >
-                                🖥 Trace stdout
+                                🖥 Simulation Trace
                             </button>
                             <button
                                 style={{
@@ -641,7 +641,7 @@ export const TerminalConsole: React.FC = () => {
 
                     {isCollapsed && (
                         <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, letterSpacing: '0.4px', marginLeft: '6px' }}>
-                            {terminalActiveTab === 'trace' ? 'Trace stdout' : 'Agent Shell'} (Collapsed)
+                            {terminalActiveTab === 'trace' ? 'Simulation Trace' : 'Agent Shell'} (Collapsed)
                         </span>
                     )}
                 </div>
@@ -668,7 +668,7 @@ export const TerminalConsole: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Copy button helpers for Live Trace stdout */}
+                        {/* Copy button helpers for Simulation Trace */}
                         {terminalActiveTab === 'trace' && (
                             <div style={{ display: 'flex', gap: '4px' }}>
                                 <button 
