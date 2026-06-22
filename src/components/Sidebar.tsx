@@ -3,8 +3,6 @@ import { useProjectStore } from '../store/useProjectStore';
 import { AI_PROMPTS } from '../constants';
 import { reloadHistoryCache, saveAuditRun, deleteAuditRun } from '../db';
 import { 
-    generateExecutionLogJSON, 
-    generateExecutionLogMarkdown, 
     generateKnowledgePackJSON, 
     generateKnowledgePackMarkdown 
 } from '../utils/generators';
@@ -67,7 +65,6 @@ export const Sidebar: React.FC = () => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [promptCloudOpen, setPromptCloudOpen] = useState(false);
     const [composerHeight, setComposerHeight] = useState('54px');
-    const [logViewMode, setLogViewMode] = useState<'terminal' | 'json'>('terminal');
 
     // LLM Config state (hydrates from localStorage)
     const [aiProvider, setAiProvider] = useState(() => localStorage.getItem("archbench_ai_provider") || "gemini");
@@ -451,41 +448,6 @@ export const Sidebar: React.FC = () => {
         });
     };
 
-    // Execution logs copy and downloads
-    const handleCopyLogJSON = () => {
-        const flow = activeFlow;
-        const currentStep = activeStepIndex;
-        if (!flow && !unifiedBatchLog) {
-            alert("Please run a simulation flow or sequential audit first.");
-            return;
-        }
-
-        const log = flow 
-            ? generateExecutionLogJSON(flow, currentStep, nodes)
-            : unifiedBatchLog;
-        
-        navigator.clipboard.writeText(JSON.stringify(log, null, 2)).then(() => {
-            alert("Execution log JSON copied to clipboard!");
-        });
-    };
-
-    const handleCopyLogMD = () => {
-        const flow = activeFlow;
-        const currentStep = activeStepIndex;
-        if (!flow && !unifiedBatchLog) {
-            alert("Please run a simulation flow or sequential audit first.");
-            return;
-        }
-
-        const md = flow 
-            ? generateExecutionLogMarkdown(flow, currentStep, nodes, currentProject?.version)
-            : getContextMarkdown(); // Fallback to md context
-        
-        navigator.clipboard.writeText(md).then(() => {
-            alert("Execution log markdown copied to clipboard!");
-        });
-    };
-
     // Terminal console shell initializer and command processor
     useEffect(() => {
         if (sidebarTab === 'terminal' && terminalRef.current) {
@@ -719,152 +681,7 @@ export const Sidebar: React.FC = () => {
         }
     };
 
-    const renderTerminalLogs = () => {
-        if (activeFlow) {
-            const lines: React.ReactNode[] = [];
-            lines.push(
-                <div key="sys-init" style={{ color: '#4a9eff', fontWeight: 600 }}>
-                    [sys] INITIALIZING SIMULATION: {activeFlow.title}
-                </div>
-            );
-            lines.push(
-                <div key="sys-ts" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '8px', marginBottom: '6px' }}>
-                    [sys] TIMESTAMP: {new Date().toLocaleTimeString()} | ECOSYSTEM: 1.0
-                </div>
-            );
-            lines.push(
-                <div key="sys-border-1" style={{ color: 'rgba(255,255,255,0.1)', marginBottom: '8px' }}>
-                    ------------------------------------------------------------
-                </div>
-            );
-
-            activeFlow.steps.forEach((s, idx) => {
-                const nodeTitle = nodes.find(n => n.id === s.node)?.title || s.node;
-                if (idx < activeStepIndex) {
-                    lines.push(
-                        <div key={`step-${idx}`} style={{ marginBottom: '8px' }}>
-                            <span style={{ color: '#52ff88', fontWeight: 700 }}>[OK]   </span>
-                            <span style={{ color: '#ffffff', fontWeight: 600 }}>Step {idx + 1}: {nodeTitle}</span>
-                            <div style={{ color: 'rgba(255,255,255,0.5)', paddingLeft: '42px' }}>
-                                Action: <span style={{ color: 'hsl(200,80%,65%)' }}>{s.label}</span>
-                            </div>
-                            <div style={{ color: 'rgba(255,255,255,0.35)', paddingLeft: '42px', fontStyle: 'italic', fontSize: '8px', marginTop: '2px' }}>
-                                ↳ Result: SUCCESS | payload_size={JSON.stringify(s.data || '').length}b
-                            </div>
-                        </div>
-                    );
-                } else if (idx === activeStepIndex) {
-                    lines.push(
-                        <div key={`step-${idx}`} style={{ 
-                            background: 'rgba(100, 180, 255, 0.04)', 
-                            borderLeft: '2px solid hsl(200,85%,62%)', 
-                            padding: '6px 8px', 
-                            borderRadius: '0 4px 4px 0',
-                            marginBottom: '8px',
-                            boxShadow: 'inset 0 0 10px rgba(100, 180, 255, 0.05)'
-                        }}>
-                            <span style={{ color: 'hsl(200,85%,62%)', fontWeight: 700 }} className="term-pulse">[EXEC] </span>
-                            <span style={{ color: '#ffffff', fontWeight: 700 }}>Step {idx + 1}: {nodeTitle}</span>
-                            <div style={{ color: 'rgba(255,255,255,0.8)', paddingLeft: '8px', marginTop: '4px' }}>
-                                <span style={{ color: 'var(--text-muted)' }}>Action:</span> {s.label}
-                            </div>
-                            <div style={{ color: 'rgba(255,255,255,0.8)', paddingLeft: '8px' }}>
-                                <span style={{ color: 'var(--text-muted)' }}>Detail:</span> {s.detail}
-                            </div>
-                            {s.data && (
-                                <div style={{ color: 'rgba(255,255,255,0.7)', paddingLeft: '8px', fontSize: '8px', fontFamily: 'monospace', background: 'rgba(0,0,0,0.3)', padding: '4px 6px', borderRadius: '4px', marginTop: '4px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                    <span style={{ color: 'hsl(40, 95%, 70%)' }}>Payload:</span> {typeof s.data === 'object' ? JSON.stringify(s.data) : String(s.data)}
-                                </div>
-                            )}
-                        </div>
-                    );
-                } else {
-                    lines.push(
-                        <div key={`step-${idx}`} style={{ marginBottom: '8px', opacity: 0.35 }}>
-                            <span style={{ color: 'rgba(255,255,255,0.4)' }}>[WAIT] </span>
-                            <span>Step {idx + 1}: {nodeTitle}</span>
-                            <div style={{ paddingLeft: '42px', fontSize: '8px', marginTop: '2px' }}>
-                                Action: {s.label}
-                            </div>
-                        </div>
-                    );
-                }
-            });
-
-            if (activeStepIndex === activeFlow.steps.length - 1) {
-                lines.push(
-                    <div key="sys-border-2" style={{ color: 'rgba(255,255,255,0.1)', marginBottom: '8px', marginTop: '8px' }}>
-                        ------------------------------------------------------------
-                    </div>
-                );
-                lines.push(
-                    <div key="sys-done" style={{ color: '#52ff88', fontWeight: 600 }}>
-                        [sys] SIMULATION TRACE COMPLETED SUCCESSFULLY.
-                    </div>
-                );
-            }
-
-            return lines;
-        }
-
-        if (unifiedBatchLog) {
-            return (
-                <div style={{ color: 'rgba(255,255,255,0.85)' }}>
-                    <span style={{ color: '#4a9eff', fontWeight: 600 }}>[sys] BATCH AUDIT RUN SUMMARY</span>
-                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '8px', marginBottom: '8px' }}>
-                        Timestamp: {new Date(unifiedBatchLog.timestamp).toLocaleString()} | Version: {unifiedBatchLog.version || "1.0"}
-                    </div>
-                    <div style={{ color: 'rgba(255,255,255,0.1)', marginBottom: '8px' }}>------------------------------------------------------------</div>
-                    
-                    <div style={{ marginBottom: '12px' }}>
-                        <span style={{ color: 'hsl(200,85%,62%)', fontWeight: 700 }}>Flows Simulated:</span>
-                        <ul style={{ margin: '4px 0 0 12px', padding: 0, listStyle: 'none' }}>
-                            {unifiedBatchLog.flowsSimulated.map((flowTitle, idx) => (
-                                <li key={idx} style={{ color: '#ffffff' }}>
-                                    • {flowTitle} <span style={{ color: '#52ff88', fontSize: '8px', fontWeight: 600 }}>[OK]</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-
-                    <div>
-                        <span style={{ color: 'hsl(200,85%,62%)', fontWeight: 700 }}>Execution Steps Logs:</span>
-                        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {unifiedBatchLog.steps.map((step, idx) => (
-                                <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                                        <span style={{ color: '#ffffff' }}>{step.flow}</span>
-                                        <span style={{ color: '#52ff88' }}>[OK]</span>
-                                    </div>
-                                    <div style={{ color: 'rgba(255,255,255,0.7)', marginTop: '2px' }}>
-                                        Node: <strong style={{ color: 'hsl(40, 95%, 70%)' }}>{nodes.find(n => n.id === step.node)?.title || step.node}</strong> | Action: {step.action}
-                                    </div>
-                                    {step.details && (
-                                        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '8px', marginTop: '2px', fontStyle: 'italic' }}>
-                                            ↳ {step.details}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: '40px', padding: '0 10px' }}>
-                <div style={{ fontSize: '20px', marginBottom: '12px' }}>💻</div>
-                <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'rgba(255,255,255,0.3)', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)', lineHeight: '1.5' }}>
-                    NOISY-ARCHITECTS:~$ archbench --audit --live<br/>
-                    <span style={{ color: 'rgba(255,255,255,0.15)' }}>Waiting for execution trace flow input...</span>
-                </div>
-                <p style={{ fontSize: '9px', marginTop: '14px', lineHeight: '1.4', color: 'var(--text-muted)' }}>
-                    Select any Trace Flow button from the header panel to execute a live simulation and stream trace logs here.
-                </p>
-            </div>
-        );
-    };
+    // Logs formatter (moved to bottom TerminalConsole)
 
     return (
         <div className={`flow-playback ${dockRight ? 'dock-right' : 'dock-left'} ${collapsed ? 'collapsed' : ''}`} id="flow-playback">
@@ -912,9 +729,7 @@ export const Sidebar: React.FC = () => {
                 <button className={`fp-tab ${sidebarTab === 'batch' ? 'active' : ''}`} onClick={() => handleTabClick('batch')} title="Flow Checklist & Audit">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </button>
-                <button className={`fp-tab ${sidebarTab === 'log' ? 'active' : ''}`} onClick={() => handleTabClick('log')} title="Simulation Execution Log">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></svg>
-                </button>
+                {/* Execution log tab removed */}
                 <button className={`fp-tab ${sidebarTab === 'health' ? 'active' : ''}`} onClick={() => handleTabClick('health')} title="Architecture Health Report">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 </button>
@@ -1258,63 +1073,6 @@ export const Sidebar: React.FC = () => {
                             </div>
                             <div id="batch-status-msg" style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', fontStyle: 'italic', textAlign: 'center' }}>
                                 {batchStatusMsg}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ── EXECUTION LOG PANEL ───────────────────────────────── */}
-                    {sidebarTab === 'log' && (
-                        <div className="fp-tab-panel active" id="panel-log" style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%' }}>
-                            <div className="log-view-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                                
-                                {/* View Mode Selector */}
-                                <div className="log-toggle-container" style={{ display: 'flex', gap: '4px', marginBottom: '10px' }}>
-                                    <button 
-                                        className={`tb-btn ${logViewMode === 'terminal' ? 'active' : ''}`} 
-                                        style={{ flex: 1, padding: '6px 8px', fontSize: '10px', background: logViewMode === 'terminal' ? 'rgba(100, 180, 255, 0.08)' : 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '4px', cursor: 'pointer', color: logViewMode === 'terminal' ? '#ffffff' : 'var(--text-muted)', transition: 'all 0.2s' }} 
-                                        onClick={() => setLogViewMode('terminal')}
-                                    >
-                                        💻 Stdout Terminal
-                                    </button>
-                                    <button 
-                                        className={`tb-btn ${logViewMode === 'json' ? 'active' : ''}`} 
-                                        style={{ flex: 1, padding: '6px 8px', fontSize: '10px', background: logViewMode === 'json' ? 'rgba(100, 180, 255, 0.08)' : 'transparent', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '4px', cursor: 'pointer', color: logViewMode === 'json' ? '#ffffff' : 'var(--text-muted)', transition: 'all 0.2s' }} 
-                                        onClick={() => setLogViewMode('json')}
-                                    >
-                                        📄 Raw JSON Spec
-                                    </button>
-                                </div>
-
-                                {logViewMode === 'terminal' ? (
-                                    <div className="terminal-window" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#05060b', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', overflow: 'hidden' }}>
-                                        <div className="terminal-header" style={{ height: '28px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', padding: '0 10px', justifyContent: 'space-between', userSelect: 'none' }}>
-                                            <div className="terminal-dots" style={{ display: 'flex', gap: '5px' }}>
-                                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ff5f56' }}></span>
-                                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ffbd2e' }}></span>
-                                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#27c93f' }}></span>
-                                            </div>
-                                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>archbench-stdout.log</span>
-                                            <div style={{ width: '34px' }}></div>
-                                        </div>
-                                        <div className="terminal-body" style={{ flex: 1, overflow: 'auto', padding: '12px', fontSize: '9px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', lineHeight: '1.4', textAlign: 'left' }}>
-                                            {renderTerminalLogs()}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <pre className="code-preview" id="log-code-preview" style={{ flex: 1, overflow: 'auto', background: '#05060b', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', padding: '10px', fontSize: '9px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                                        {activeFlow 
-                                            ? JSON.stringify(generateExecutionLogJSON(activeFlow, activeStepIndex, nodes), null, 2)
-                                            : unifiedBatchLog 
-                                                ? JSON.stringify(unifiedBatchLog, null, 2)
-                                                : "Select and run a simulation scenario to record system execution logs."
-                                        }
-                                    </pre>
-                                )}
-
-                                <div className="action-row" style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
-                                    <button className="btn-primary" style={{ flex: 1, fontSize: '10px', padding: '6px' }} onClick={handleCopyLogJSON}>Copy JSON</button>
-                                    <button className="btn-secondary" style={{ flex: 1, fontSize: '10px', padding: '6px' }} onClick={handleCopyLogMD}>Copy MD</button>
-                                </div>
                             </div>
                         </div>
                     )}

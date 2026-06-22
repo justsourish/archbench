@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
 import { useProjectStore } from './store/useProjectStore';
 import { ReactFlowCanvas } from './components/ReactFlowCanvas';
+import { TerminalConsole } from './components/TerminalConsole';
 import { Topbar } from './components/Topbar';
 import { FlowBar } from './components/FlowBar';
 import { Sidebar } from './components/Sidebar';
@@ -87,8 +88,11 @@ function App() {
                 />
                 <FlowBar />
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                    <div style={{ flex: 1, position: 'relative' }}>
-                        <ReactFlowCanvas setZoomLabel={setZoomLabel} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+                        <div style={{ flex: 1, position: 'relative' }}>
+                            <ReactFlowCanvas setZoomLabel={setZoomLabel} />
+                        </div>
+                        <TerminalConsole />
                     </div>
                     <Sidebar />
                 </div>
