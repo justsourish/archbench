@@ -16,6 +16,7 @@ export const CustomEdge: React.FC<EdgeProps> = ({
 }) => {
     const activeFlow = useProjectStore(state => state.activeFlow);
     const activeStepIndex = useProjectStore(state => state.activeStepIndex);
+    const hoveredNodeId = useProjectStore(state => state.hoveredNodeId);
 
     // Default label/colors if not in data
     const label = data?.label || "";
@@ -23,7 +24,6 @@ export const CustomEdge: React.FC<EdgeProps> = ({
     const sourceColor = data?.sourceColor || "hsl(200,80%,58%)";
     const targetColor = data?.targetColor || "hsl(200,80%,58%)";
     const isHighlighted = data?.isHighlighted || false;
-    const isHoverDimmed = data?.isHoverDimmed || false;
 
     // Determine simulation state classes
     let isActive = false;
@@ -82,8 +82,10 @@ export const CustomEdge: React.FC<EdgeProps> = ({
     const arrowD = `M ${targetX - aLen * Math.cos(angle - 0.4)} ${targetY - aLen * Math.sin(angle - 0.4)} L ${targetX} ${targetY} L ${targetX - aLen * Math.cos(angle + 0.4)} ${targetY - aLen * Math.sin(angle + 0.4)}`;
 
     // Build class lists
-    const hoverClass = isHoverDimmed ? 'hover-dimmed' : '';
-    const stateClass = isActive ? 'flow-active' : isPrev ? 'flow-active-prev' : isDimmed ? 'flow-dimmed' : isHighlighted ? 'highlighted' : hoverClass;
+    const isEdgeConnected = hoveredNodeId === source || hoveredNodeId === target;
+    const isEdgeHighlighted = isHighlighted || (hoveredNodeId && isEdgeConnected);
+    const hoverClass = hoveredNodeId ? (isEdgeConnected ? 'highlighted' : 'hover-dimmed') : '';
+    const stateClass = isActive ? 'flow-active' : isPrev ? 'flow-active-prev' : isDimmed ? 'flow-dimmed' : isEdgeHighlighted ? 'highlighted' : hoverClass;
     
     const lineClasses = ['conn-line', stateClass].filter(Boolean).join(' ');
     const arrowClasses = ['conn-arrow', stateClass].filter(Boolean).join(' ');
@@ -94,7 +96,7 @@ export const CustomEdge: React.FC<EdgeProps> = ({
     if (type === "future") {
         lineStyle.opacity = "0.12";
     }
-    if (isHighlighted) {
+    if (isEdgeHighlighted) {
         lineStyle.filter = `drop-shadow(0 0 5px ${targetColor})`;
     }
 

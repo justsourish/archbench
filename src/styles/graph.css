@@ -299,24 +299,16 @@ html, body {
 
 /* ── Hover Highlighting States (Figma/Blender panel styling) ───── */
 
-.react-flow__node.hover-dimmed {
+.graph-node.hover-dimmed {
     opacity: 0.25 !important;
 }
 
-.react-flow__node.hover-primary {
-    z-index: 80 !important;
-}
-
-.react-flow__node.hover-primary .graph-node {
+.graph-node.hover-primary {
     border-color: var(--node-color) !important;
     box-shadow: var(--node-shadow), 0 0 60px color-mix(in srgb, var(--node-color) 20%, transparent) !important;
 }
 
-.react-flow__node.hover-connected {
-    z-index: 70 !important;
-}
-
-.react-flow__node.hover-connected .graph-node {
+.graph-node.hover-connected {
     border-color: color-mix(in srgb, var(--node-color) 60%, transparent) !important;
     box-shadow: var(--node-shadow), 0 0 35px color-mix(in srgb, var(--node-color) 8%, transparent) !important;
 }

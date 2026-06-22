@@ -15,6 +15,7 @@ interface ProjectState {
     liveWatchEnabled: boolean;
     unifiedBatchLog: BatchLog | null;
     watchDirectoryHandle: any | null;
+    hoveredNodeId: string | null;
 
     // Actions
     initializeStore: () => void;
@@ -31,6 +32,7 @@ interface ProjectState {
     createProject: (project: Project) => void;
     deleteProject: (projectId: string) => Promise<void>;
     updateProject: (projectId: string, title: string, version: string, spec: Project) => void;
+    setHoveredNodeId: (id: string | null) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -45,6 +47,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     liveWatchEnabled: false,
     unifiedBatchLog: null,
     watchDirectoryHandle: null,
+    hoveredNodeId: null,
 
     initializeStore: () => {
         const list = getAvailableProjects();
@@ -62,7 +65,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             connections: activeProj ? (activeProj.connections || []) : [],
             flows: activeProj ? (activeProj.flows || []) : [],
             activeFlow: null,
-            activeStepIndex: -1
+            activeStepIndex: -1,
+            hoveredNodeId: null
         });
     },
 
@@ -75,7 +79,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             flows: projectToLoad.flows || [],
             activeFlow: null,
             activeStepIndex: -1,
-            unifiedBatchLog: null
+            unifiedBatchLog: null,
+            hoveredNodeId: null
         });
     },
 
@@ -137,6 +142,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     setLiveWatchEnabled: (enabled: boolean) => {
         set({ liveWatchEnabled: enabled });
+    },
+
+    setHoveredNodeId: (id: string | null) => {
+        set({ hoveredNodeId: id });
     },
 
     setWatchDirectoryHandle: (handle: any | null) => {
@@ -211,7 +220,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                     flows: [],
                     activeFlow: null,
                     activeStepIndex: -1,
-                    unifiedBatchLog: null
+                    unifiedBatchLog: null,
+                    hoveredNodeId: null
                 });
             }
         }

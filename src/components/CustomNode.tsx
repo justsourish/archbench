@@ -19,6 +19,8 @@ export const CustomNode: React.FC<NodeProps<NodeData>> = ({ id, data, selected }
 
     const activeFlow = useProjectStore(state => state.activeFlow);
     const activeStepIndex = useProjectStore(state => state.activeStepIndex);
+    const hoveredNodeId = useProjectStore(state => state.hoveredNodeId);
+    const connections = useProjectStore(state => state.connections);
 
     const actualDesc = desc || description;
 
@@ -63,12 +65,32 @@ export const CustomNode: React.FC<NodeProps<NodeData>> = ({ id, data, selected }
         flowClass = "highlighted";
     }
 
+    // Determine connected hover state
+    const isConnected = React.useMemo(() => {
+        if (!hoveredNodeId) return false;
+        return connections.some(([from, to]) => 
+            (from === hoveredNodeId && to === id) || (to === hoveredNodeId && from === id)
+        );
+    }, [hoveredNodeId, connections, id]);
+
+    let hoverClass = "";
+    if (hoveredNodeId) {
+        if (hoveredNodeId === id) {
+            hoverClass = "hover-primary";
+        } else if (isConnected) {
+            hoverClass = "hover-connected";
+        } else {
+            hoverClass = "hover-dimmed";
+        }
+    }
+
     // Determine node wrapper classes
     const wrapperClasses = [
         'graph-node',
         nodeType === 'boundary' ? 'node-boundary' : '',
         nodeType === 'datamodel' ? 'node-datamodel' : '',
-        flowClass
+        flowClass,
+        hoverClass
     ].filter(Boolean).join(' ');
 
     const style = {
