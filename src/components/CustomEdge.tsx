@@ -47,12 +47,15 @@ export const CustomEdge: React.FC<EdgeProps> = ({
     const dx = targetX - sourceX;
     const dy = targetY - sourceY;
     
+    const sourcePosStr = sourcePosition as string;
+    const targetPosStr = targetPosition as string;
+
     // Choose horizontal or vertical control point offsets based on handle orientation
     const isHorizontal = 
-        sourcePosition === 'left' || 
-        sourcePosition === 'right' || 
-        targetPosition === 'left-t' || 
-        targetPosition === 'right-t';
+        sourcePosStr === 'left' || 
+        sourcePosStr === 'right' || 
+        targetPosStr === 'left-t' || 
+        targetPosStr === 'right-t';
 
     const t = Math.min(Math.abs(dx), Math.abs(dy), 160) * 0.55 + 50;
     
@@ -62,11 +65,11 @@ export const CustomEdge: React.FC<EdgeProps> = ({
     let c2y = targetY;
 
     if (isHorizontal) {
-        c1x = sourceX + (sourcePosition === 'left' ? -t : t);
-        c2x = targetX + (targetPosition === 'left-t' ? -t : t);
+        c1x = sourceX + (sourcePosStr === 'left' ? -t : t);
+        c2x = targetX + (targetPosStr === 'left-t' ? -t : t);
     } else {
-        c1y = sourceY + (sourcePosition === 'top' ? -t : t);
-        c2y = targetY + (targetPosition === 'top-t' ? -t : t);
+        c1y = sourceY + (sourcePosStr === 'top' ? -t : t);
+        c2y = targetY + (targetPosStr === 'top-t' ? -t : t);
     }
 
     const pathD = `M ${sourceX} ${sourceY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${targetX} ${targetY}`;

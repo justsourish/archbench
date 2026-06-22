@@ -23,7 +23,8 @@ export const Topbar: React.FC<TopbarProps> = ({
         reloadProjectsList,
         liveWatchEnabled,
         setLiveWatchEnabled,
-        setSidebarTab
+        setSidebarTab,
+        deleteProject
     } = useProjectStore();
 
     const { zoomIn, zoomOut, fitView, setViewport } = useReactFlow();
@@ -130,9 +131,32 @@ export const Topbar: React.FC<TopbarProps> = ({
                                                     loadProject(proj);
                                                     setDropdownOpen(false);
                                                 }}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                             >
-                                                <div className="project-item-title">{proj.title}</div>
-                                                <div className="project-item-meta">v{proj.version || '1.0'} • {proj.nodes?.length || 0} nodes</div>
+                                                <div>
+                                                    <div className="project-item-title">{proj.title}</div>
+                                                    <div className="project-item-meta">v{proj.version || '1.0'} • {proj.nodes?.length || 0} nodes</div>
+                                                </div>
+                                                {proj.id !== DEFAULT_PROJECT_ID && (
+                                                    <button 
+                                                        className="project-item-delete"
+                                                        title="Delete Project"
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            if (window.confirm(`Are you sure you want to permanently delete project '${proj.title}' and all of its simulation history?`)) {
+                                                                await deleteProject(proj.id);
+                                                            }
+                                                        }}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                                    >
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                            <polyline points="3 6 5 6 21 6"/>
+                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                                            <line x1="10" y1="11" x2="10" y2="17"/>
+                                                            <line x1="14" y1="11" x2="14" y2="17"/>
+                                                        </svg>
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -190,7 +214,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                     <span>Fit</span>
                 </button>
                 <button className="tb-btn" id="btn-reset" title="Reset View" onClick={handleReset}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                     <span>Reset</span>
                 </button>
                 <span className="tb-divider"></span>

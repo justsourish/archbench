@@ -57,10 +57,10 @@ export function renderMarkdownToHtml(markdown: string | undefined): string {
         .replace(/>/g, "&gt;");
 
     // Code blocks
-    html = html.replace(/```([a-zA-Z0-9-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    html = html.replace(/```([a-zA-Z0-9-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
         return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
     });
-    html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
+    html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
         return `<pre><code>${code.trim()}</code></pre>`;
     });
 

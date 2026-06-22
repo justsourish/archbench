@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Project, NodeData, ConnectionData, Flow, BatchLog } from '../types';
 import { getAvailableProjects, getCustomProjects, saveCustomProjects } from '../utils/projectHelpers';
+import { clearProjectHistoryFromDB } from '../db';
 
 interface ProjectState {
     availableProjects: Project[];
@@ -13,6 +14,7 @@ interface ProjectState {
     sidebarTab: string;
     liveWatchEnabled: boolean;
     unifiedBatchLog: BatchLog | null;
+    watchDirectoryHandle: any | null;
 
     // Actions
     initializeStore: () => void;
@@ -24,7 +26,11 @@ interface ProjectState {
     stepFlow: (direction: 'next' | 'prev') => void;
     setUnifiedBatchLog: (log: BatchLog | null) => void;
     setLiveWatchEnabled: (enabled: boolean) => void;
+    setWatchDirectoryHandle: (handle: any | null) => void;
     updateNodePosition: (nodeId: string, x: number, y: number) => void;
+    createProject: (project: Project) => void;
+    deleteProject: (projectId: string) => Promise<void>;
+    updateProject: (projectId: string, title: string, version: string, spec: Project) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -38,6 +44,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     sidebarTab: 'ai',
     liveWatchEnabled: false,
     unifiedBatchLog: null,
+    watchDirectoryHandle: null,
 
     initializeStore: () => {
         const list = getAvailableProjects();
@@ -132,6 +139,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({ liveWatchEnabled: enabled });
     },
 
+    setWatchDirectoryHandle: (handle: any | null) => {
+        set({ watchDirectoryHandle: handle });
+    },
+
     updateNodePosition: (nodeId: string, x: number, y: number) => {
         const { currentProject, nodes, availableProjects } = get();
         const updatedNodes = nodes.map(n => n.id === nodeId ? { ...n, x, y } : n);
@@ -162,6 +173,81 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             });
         } else {
             set({ nodes: updatedNodes });
+        }
+    },
+
+    createProject: (newProj: Project) => {
+        const custom = getCustomProjects();
+        custom.push(newProj);
+        saveCustomProjects(custom);
+        get().reloadProjectsList();
+        get().loadProject(newProj);
+    },
+
+    deleteProject: async (projectId: string) => {
+        const custom = getCustomProjects();
+        const updated = custom.filter(p => p.id !== projectId);
+        saveCustomProjects(updated);
+        
+        try {
+            await clearProjectHistoryFromDB(projectId);
+        } catch (e) {
+            console.error("Failed to clear project history from DB", e);
+        }
+
+        const current = get().currentProject;
+        get().reloadProjectsList();
+        
+        if (current && current.id === projectId) {
+            const list = get().availableProjects;
+            const nextProj = list.length > 0 ? list[0] : null;
+            if (nextProj) {
+                get().loadProject(nextProj);
+            } else {
+                set({
+                    currentProject: null,
+                    nodes: [],
+                    connections: [],
+                    flows: [],
+                    activeFlow: null,
+                    activeStepIndex: -1,
+                    unifiedBatchLog: null
+                });
+            }
+        }
+    },
+
+    updateProject: (projectId: string, title: string, version: string, spec: Project) => {
+        const custom = getCustomProjects();
+        const idx = custom.findIndex(p => p.id === projectId);
+        
+        let savedProject: Project;
+        if (idx === -1) {
+            // Editing built-in project, save as a new custom project clone
+            savedProject = {
+                ...spec,
+                id: "project_" + Date.now(),
+                title,
+                version
+            };
+            custom.push(savedProject);
+            saveCustomProjects(custom);
+        } else {
+            savedProject = {
+                ...spec,
+                id: projectId,
+                title,
+                version
+            };
+            custom[idx] = savedProject;
+            saveCustomProjects(custom);
+        }
+        
+        get().reloadProjectsList();
+        
+        const current = get().currentProject;
+        if (current && (current.id === projectId || idx === -1)) {
+            get().loadProject(savedProject);
         }
     }
 }));

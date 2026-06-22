@@ -1,4 +1,4 @@
-import { Project, NodeData, ConnectionData, Flow, LayerZone, TrustBoundaryGeometry } from '../types';
+import { Project, NodeData, Flow } from '../types';
 
 export function parseMarkdownToProject(md: string): Project {
     const lines = md.split(/\r?\n/);

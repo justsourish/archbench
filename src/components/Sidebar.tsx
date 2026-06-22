@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { AI_PROMPTS } from '../constants';
-import { reloadHistoryCache, saveAuditRun, deleteAuditRun, clearProjectHistoryFromDB } from '../db';
+import { reloadHistoryCache, saveAuditRun, deleteAuditRun } from '../db';
 import { 
     generateExecutionLogJSON, 
     generateExecutionLogMarkdown, 
@@ -14,7 +14,8 @@ import { generateArchitectureHealthReport } from '../utils/health-engine';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { Project, BatchLog } from '../types';
+import { BatchLog } from '../types';
+import { exportProjectToMarkdown } from '../utils/parser';
 
 interface Message {
     role: 'system' | 'user' | 'ai' | 'error';
@@ -76,7 +77,7 @@ export const Sidebar: React.FC = () => {
     const [selectedFlows, setSelectedFlows] = useState<string[]>([]);
     const [batchRunning, setBatchRunning] = useState(false);
     const [batchStatusMsg, setBatchStatusMsg] = useState("No batch audit active.");
-    const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const batchTimerRef = useRef<any | null>(null);
 
     // Terminal references
     const terminalRef = useRef<HTMLDivElement>(null);
@@ -108,7 +109,7 @@ export const Sidebar: React.FC = () => {
 
     // Autoplay logic for flow simulation
     const [autoPlayActive, setAutoPlayActive] = useState(false);
-    const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const autoPlayTimerRef = useRef<any | null>(null);
 
     useEffect(() => {
         if (autoPlayActive && activeFlow) {
@@ -483,7 +484,7 @@ export const Sidebar: React.FC = () => {
                         background: '#07080d',
                         foreground: '#e2e4e9',
                         cursor: '#b482ff',
-                        selection: 'rgba(180, 130, 255, 0.3)'
+                        selectionBackground: 'rgba(180, 130, 255, 0.3)'
                     },
                     fontSize: 10,
                     fontFamily: 'monospace',
@@ -493,7 +494,9 @@ export const Sidebar: React.FC = () => {
 
                 const fitAddon = new FitAddon();
                 term.loadAddon(fitAddon);
-                term.open(terminalRef.current);
+                if (terminalRef.current) {
+                    term.open(terminalRef.current);
+                }
                 fitAddon.fit();
 
                 term.writeln("\x1b[1;35mArchBench Project Agent Terminal v1.0\x1b[0m");

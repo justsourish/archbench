@@ -3,8 +3,6 @@ import ReactFlow, {
     Node, 
     Edge, 
     NodeChange,
-    ReactFlowProvider,
-    useReactFlow,
     useViewport
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -179,9 +177,6 @@ const CanvasInner: React.FC<{
 export const ReactFlowCanvas: React.FC<{
     setZoomLabel: (label: string) => void;
 }> = ({ setZoomLabel }) => {
-    return (
-        <ReactFlowProvider>
-            <CanvasInner setZoomLabel={setZoomLabel} />
-        </ReactFlowProvider>
-    );
+    return <CanvasInner setZoomLabel={setZoomLabel} />;
 };
+
