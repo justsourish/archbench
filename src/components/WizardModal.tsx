@@ -12,11 +12,13 @@ export const WizardModal: React.FC<WizardModalProps> = ({ isOpen, onClose }) => 
     const createProject = useProjectStore(s => s.createProject);
 
     // Navigation State:
-    // 1: Choose Single vs Multi vs GitHub
+    // 1: Intent Selection (Existing Codebase vs New System Design)
+    // 2: Workspace Type Selection (Single vs Multi Repo)
     // 'single': Single Repo Configuration
     // 'multi': Multi Repo Configuration
-    // 'prompt': Copier prompt after scaffolding
-    const [step, setStep] = useState<1 | 'single' | 'multi' | 'prompt'>(1);
+    // 'prompt': Copier prompt after scaffolding with Live Watch status
+    const [step, setStep] = useState<1 | 2 | 'single' | 'multi' | 'prompt'>(1);
+    const [intent, setIntent] = useState<'existing' | 'new' | null>(null);
 
     // Shared Form States
     const [workspaceName, setWorkspaceName] = useState('');
@@ -187,7 +189,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
         setScannedSpec(null);
         setScaffoldNeeded(false);
 
-        // Autofill Workspace Name from folder handle
+        // Autofill Workspace Name from folder handle name
         const rawName = dirHandle.name;
         const formattedName = rawName.split(/[_-]/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "My Workspace";
         setWorkspaceName(formattedName);
@@ -199,6 +201,19 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
             try {
                 const arcbenchDir = await dirHandle.getDirectoryHandle(".arcbench");
                 specFileHandle = await arcbenchDir.getFileHandle("architecture.md");
+
+                // If multi-repo and existing workspace: load workspace.json too
+                try {
+                    const wsHandle = await arcbenchDir.getFileHandle("workspace.json");
+                    const wsFile = await wsHandle.getFile();
+                    const wsText = await wsFile.text();
+                    const wsConfig = JSON.parse(wsText);
+                    if (wsConfig && wsConfig.repositories) {
+                        setReposList(wsConfig.repositories);
+                    }
+                } catch (e) {
+                    // Not found or single-repo
+                }
             } catch (e) {
                 // Not found in .arcbench/ directory, fallback to root folder
             }
@@ -336,10 +351,6 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                     connectionsList.push(["worker", "db", "Update Job Status", "data"]);
                 }
 
-                if (connectionsList.length === 0 && nodeIds.length >= 2) {
-                    connectionsList.push([nodeIds[0], nodeIds[1], "Connects To", "request"]);
-                }
-
                 const flowSteps = nodesList.map(n => ({
                     node: n.id,
                     label: `Process at ${n.title}`,
@@ -403,7 +414,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                 console.warn("Directory selection cancelled or failed:", err);
             }
         } else {
-            showToast("Your browser does not support the File System Access API. Please use a modern desktop browser (Chrome/Edge/Safari).");
+            showToast("Your browser does not support the File System Access API. Please use a modern desktop browser.");
         }
     };
 
@@ -441,8 +452,10 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
 
         const linkedRepos = step === 'multi' ? reposList : undefined;
 
-        // Perform scaffolding if missing
-        if (scaffoldNeeded || !scannedSpec) {
+        // Perform scaffolding if missing or if intent is new project configuration
+        const reallyScaffold = scaffoldNeeded || intent === 'new' || !scannedSpec;
+
+        if (reallyScaffold) {
             await writeScaffoldFiles(workspaceRootHandle, specToLoad, linkedRepos);
         }
 
@@ -451,7 +464,14 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
         useProjectStore.getState().setWatchDirectoryHandle(workspaceRootHandle);
         useProjectStore.getState().setLiveWatchEnabled(true);
 
-        // Pre-compose instructions prompt for AI agent
+        // If no scaffold was needed (existing spec found), directly open and close modal
+        if (!reallyScaffold) {
+            showToast(`Workspace '${specToLoad.title}' loaded successfully!`);
+            onClose();
+            return;
+        }
+
+        // Otherwise (scaffold was written), present agent system prompts & active watch indicator
         if (step === 'single') {
             const prompt = `You are a senior system architect. I have initialized an ArchBench workspace in my repository folder. Analyze my codebase files and write the architecture specification directly into .arcbench/architecture.md, following the format rules in .arcbench/PROJECT_RULES.md. Do not output explanations, only write the markdown code.`;
             setAgentPromptText(prompt);
@@ -463,6 +483,11 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
             setAgentPromptText(prompt);
             setStep('prompt');
         }
+    };
+
+    const handleSelectIntent = (selectedIntent: 'existing' | 'new') => {
+        setIntent(selectedIntent);
+        setStep(2);
     };
 
     return (
@@ -482,24 +507,47 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                     {step === 1 && (
                         <div>
                             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '20px', textAlign: 'center', lineHeight: '1.4' }}>
-                                Connect your local codebases. Setup visual dashboards and configure scaffolding templates for your coding AI agents.
+                                Connect your local project. Prepare guidelines and scaffold files for your coding AI agents.
+                            </div>
+                            <div className="wizard-options" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => handleSelectIntent('existing')}>
+                                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>🔍</div>
+                                    <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>Existing Codebase</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Connect an existing codebase repository folder. We scan folders and load or create spec files.</div>
+                                </button>
+                                <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => handleSelectIntent('new')}>
+                                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>💡</div>
+                                    <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>New System Design</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Start a brand new architecture layout. Creates boilerplate templates in a clean directory folder.</div>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 2 && (
+                        <div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '20px', textAlign: 'center', lineHeight: '1.4' }}>
+                                {intent === 'existing' ? "How is your existing codebase structured?" : "How would you like to structure this new design?"}
                             </div>
                             <div className="wizard-options" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => setStep('single')}>
                                     <div style={{ fontSize: '20px', marginBottom: '6px' }}>📦</div>
                                     <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>Single Repository</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Visualize and monitor a single local project repository. Searches for `.arcbench/architecture.md` (or root file).</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Connect a single folder containing your repository code and `.arcbench/` layout files.</div>
                                 </button>
                                 <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => setStep('multi')}>
                                     <div style={{ fontSize: '20px', marginBottom: '6px' }}>🗃️</div>
                                     <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>Multi Repository</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Group and visualize multiple folders together. Create a Workspace Root Folder to version-control the layout.</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Create a Workspace Root Folder to group multiple connected codebase sub-directories.</div>
                                 </button>
                                 <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(255,255,255,0.01)', textAlign: 'left', cursor: 'default', display: 'block', width: '100%', opacity: 0.4 }}>
                                     <div style={{ fontSize: '20px', marginBottom: '6px' }}>🐙</div>
                                     <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>GitHub Repositories <span style={{ fontSize: '8px', padding: '1px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', marginLeft: '4px' }}>Coming Soon</span></div>
-                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', lineHeight: '1.4' }}>Direct webhook integrations to review structural diffs in PR audits natively.</div>
+                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', lineHeight: '1.4' }}>Review structural diffs in pull requests.</div>
                                 </button>
+                            </div>
+                            <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '16px' }}>
+                                <button type="button" className="btn-secondary" onClick={() => setStep(1)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
                             </div>
                         </div>
                     )}
@@ -528,7 +576,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                 )}
                             </div>
 
-                            {/* Workspace Name displays and is editable after selection */}
+                            {/* Workspace Name Input after selection */}
                             {workspaceRootHandle && (
                                 <div style={{ marginBottom: '12px', textAlign: 'left' }}>
                                     <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Workspace Name</label>
@@ -552,7 +600,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                             )}
 
                             <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-                                <button type="button" className="btn-secondary" onClick={() => setStep(1)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
+                                <button type="button" className="btn-secondary" onClick={() => setStep(2)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
                                 <button 
                                     type="button" 
                                     className="btn-primary" 
@@ -560,7 +608,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                     onClick={handleCreateWorkspace} 
                                     style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, background: workspaceRootHandle ? 'hsl(270,70%,60%)' : 'rgba(255,255,255,0.05)', border: 'none', color: workspaceRootHandle ? '#fff' : 'rgba(255,255,255,0.3)' }}
                                 >
-                                    {scaffoldNeeded ? "Generate Scaffold & Open" : "Open Workspace"}
+                                    {(scaffoldNeeded || intent === 'new') ? "Generate Scaffold & Open" : "Open Workspace"}
                                 </button>
                             </div>
                         </div>
@@ -573,7 +621,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                 <div style={{ fontSize: '24px', marginBottom: '6px' }}>📁</div>
                                 <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Select Workspace Root Folder</div>
                                 <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: '1.4' }}>
-                                    Select the root folder where ArcBench config metadata and <code>.arcbench/architecture.md</code> will be saved.
+                                    Choose the root folder where ArcBench workspace config metadata and <code>.arcbench/architecture.md</code> will live.
                                 </div>
                                 <button 
                                     type="button" 
@@ -609,7 +657,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                     <div style={{ marginBottom: '12px', textAlign: 'left', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
                                         <label className="form-label" style={{ fontSize: '11px', display: 'block', fontWeight: 600, marginBottom: '6px' }}>Repository Folders</label>
                                         <div style={{ fontSize: '9.5px', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: '1.4' }}>
-                                            Add directory paths for each repository inside this workspace (stored in <code>workspace.json</code>).
+                                            Add directory references for repositories in this workspace (saved to <code>workspace.json</code>).
                                         </div>
 
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
@@ -654,7 +702,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                             )}
 
                             <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-                                <button type="button" className="btn-secondary" onClick={() => setStep(1)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
+                                <button type="button" className="btn-secondary" onClick={() => setStep(2)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
                                 <button 
                                     type="button" 
                                     className="btn-primary" 
@@ -662,7 +710,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                     onClick={handleCreateWorkspace} 
                                     style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, background: (workspaceRootHandle && reposList.length > 0) ? 'hsl(270,70%,60%)' : 'rgba(255,255,255,0.05)', border: 'none', color: (workspaceRootHandle && reposList.length > 0) ? '#fff' : 'rgba(255,255,255,0.3)' }}
                                 >
-                                    Generate Scaffold & Open
+                                    {(scaffoldNeeded || intent === 'new') ? "Generate Scaffold & Open" : "Open Workspace"}
                                 </button>
                             </div>
                         </div>
@@ -672,14 +720,14 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                         <div>
                             <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(76,175,80,0.04)', border: '1px solid rgba(76,175,80,0.2)', textAlign: 'left', marginBottom: '14px' }}>
                                 <div style={{ fontWeight: 700, fontSize: '11px', color: 'hsl(150, 75%, 70%)', marginBottom: '4px' }}>
-                                    ✓ SCAFFOLD INITIALIZED SUCCESSFUL
+                                    ✓ SCAFFOLD INITIALIZED SUCCESSFULLY
                                 </div>
                                 <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                                    We created your workspace `.arcbench/` directory. Run your agent inside your IDE to map your visual architecture components.
+                                    We created your workspace `.arcbench/` directory. Copy the prompt below, run your agent, and the visualizer will auto-update in real-time.
                                 </div>
                             </div>
 
-                            <div style={{ padding: '14px', borderRadius: '8px', background: 'rgba(180, 130, 255, 0.04)', border: '1px solid rgba(180, 130, 255, 0.15)', textAlign: 'left' }}>
+                            <div style={{ padding: '14px', borderRadius: '8px', background: 'rgba(180, 130, 255, 0.04)', border: '1px solid rgba(180, 130, 255, 0.15)', textAlign: 'left', marginBottom: '14px' }}>
                                 <div style={{ fontWeight: 700, fontSize: '10.5px', color: 'hsl(280, 85%, 80%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                                     <span>🤖 AI AGENT PROMPT RULES</span>
                                     <button 
@@ -699,7 +747,15 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                 </div>
                             </div>
 
-                            <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+                            {/* Live Watch Active indicator */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: 'rgba(80, 220, 180, 0.05)', border: '1px solid rgba(80, 220, 180, 0.15)', borderRadius: '8px', justifyContent: 'center', marginBottom: '20px' }}>
+                                <span className="watch-dot-pulse" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'hsl(160, 80%, 60%)' }}></span>
+                                <span style={{ fontSize: '10.5px', fontWeight: 600, color: 'hsl(160, 80%, 75%)' }}>
+                                    Live Watch active. Waiting for changes to architecture.md...
+                                </span>
+                            </div>
+
+                            <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'center' }}>
                                 <button 
                                     type="button" 
                                     className="btn-primary" 
