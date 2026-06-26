@@ -62,19 +62,19 @@ const SKELETON_TEMPLATE = {
 };
 
 export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onClose }) => {
-    const currentProject = useProjectStore(s => s.currentProject);
-    const updateProject = useProjectStore(s => s.updateProject);
+    const currentRepository = useProjectStore(s => s.currentRepository);
+    const updateProject = useProjectStore(s => s.updateRepository);
 
     const [title, setTitle] = useState('');
     const [version, setVersion] = useState('1.0');
     const [specContent, setSpecContent] = useState('');
 
     useEffect(() => {
-        if (isOpen && currentProject) {
-            setTitle(currentProject.title || '');
-            setVersion(currentProject.version || '1.0');
+        if (isOpen && currentRepository) {
+            setTitle(currentRepository.title || '');
+            setVersion(currentRepository.version || '1.0');
             try {
-                const md = exportProjectToMarkdown(currentProject);
+                const md = exportProjectToMarkdown(currentRepository);
                 setSpecContent(md);
             } catch (e) {
                 console.error("Failed to export current project to Markdown", e);
@@ -94,7 +94,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
             };
             setSpecContent(exportProjectToMarkdown(defaultSpec));
         }
-    }, [isOpen, currentProject]);
+    }, [isOpen, currentRepository]);
 
     if (!isOpen) return null;
 
@@ -174,10 +174,10 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
             return;
         }
 
-        if (currentProject) {
-            updateProject(currentProject.id, parsedTitle, parsedVersion, spec);
+        if (currentRepository) {
+            updateProject(currentRepository.id, parsedTitle, parsedVersion, spec);
         } else {
-            alert("No active project loaded to update.");
+            alert("No active repository loaded to update.");
         }
 
         onClose();
@@ -195,7 +195,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
                 <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ display: 'flex', gap: '12px' }}>
                         <div className="form-group" style={{ flex: 1, textAlign: 'left' }}>
-                            <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Project Title</label>
+                            <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Repository Title</label>
                             <input 
                                 className="form-input" 
                                 type="text" 
@@ -206,7 +206,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
                             />
                         </div>
                         <div className="form-group" style={{ width: '120px', textAlign: 'left' }}>
-                            <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Project Version</label>
+                            <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Repository Version</label>
                             <input 
                                 className="form-input" 
                                 type="text" 
@@ -243,7 +243,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ isOpen, onCl
                 </div>
                 <div className="modal-footer" style={{ padding: '12px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                     <button type="button" className="btn-secondary" onClick={onClose} style={{ padding: '8px 16px', fontSize: '12px', borderRadius: '8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Cancel</button>
-                    <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '8px 16px', fontSize: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, background: 'hsl(270,70%,60%)', border: 'none', color: '#fff' }}>Save Project</button>
+                    <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '8px 16px', fontSize: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, background: 'hsl(270,70%,60%)', border: 'none', color: '#fff' }}>Save Repository</button>
                 </div>
             </div>
         </div>

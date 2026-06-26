@@ -60,8 +60,10 @@ export interface TrustBoundaryGeometry {
     note?: string;
 }
 
-export interface Project {
+export interface Repository {
     id: string;
+    workspaceId?: string;
+    sourceKind?: 'builtin' | 'member-bound' | 'standalone';
     title: string;
     version: string;
     description?: string;
@@ -71,6 +73,49 @@ export interface Project {
     layers?: LayerZone[];
     trustBoundary?: TrustBoundaryGeometry;
 }
+
+export type Project = Repository; // Alias for legacy code
+
+export type WorkspaceMemberStatus = 'ready' | 'needs_init' | 'disconnected';
+export type WorkspaceMemberSyncState = 'synced' | 'stale' | 'reconnect_required';
+
+export interface WorkspaceMember {
+    id: string;
+    name: string;
+    folderName: string;
+    relativeWorkspacePath: string;
+    handle: FileSystemDirectoryHandle | null;
+    status: WorkspaceMemberStatus;
+    hasArchitecture: boolean;
+    specId: string | null;
+    createdAt: string;       // ISO timestamp
+    lastConnectedAt: string;  // ISO timestamp
+    syncState?: WorkspaceMemberSyncState;
+    lastSyncAt?: string | null;
+    lastSyncError?: string | null;
+}
+
+// Workspace is the top-level ArcBench concept.
+// A workspace contains N repository folders, each owning its own .arcbench/ directory.
+export interface Workspace {
+    id: string;
+    name: string;
+    repositories: Repository[];
+    activeRepositoryId: string | null;
+    members: WorkspaceMember[];
+    
+    // For legacy project compatibility
+    projects?: Repository[];
+    activeProjectId?: string | null;
+}
+
+export type ViewType = 'workspace_overview' | 'member' | 'standalone';
+
+export interface ActiveView {
+    type: ViewType;
+    targetId: string | null; // memberId for 'member', specId for 'standalone', null for 'workspace_overview'
+}
+
 
 export interface BatchLogStep {
     node: string;

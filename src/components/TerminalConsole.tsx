@@ -17,7 +17,7 @@ export const TerminalConsole: React.FC = () => {
         activeFlow,
         activeStepIndex,
         unifiedBatchLog,
-        currentProject,
+        currentRepository,
         startFlow,
         terminalActiveTab,
         setTerminalActiveTab
@@ -143,12 +143,12 @@ export const TerminalConsole: React.FC = () => {
                 term.writeln("Type \x1b[32m'help'\x1b[0m to list available workspace commands.\n");
 
                 const writePrompt = () => {
-                    const projName = currentProject ? currentProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "untitled";
+                    const projName = currentRepository ? currentRepository.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "untitled";
                     term.write(`\x1b[1;36marchbench:${projName}$ \x1b[0m`);
                 };
 
                 const clearCurrentLine = () => {
-                    const projName = currentProject ? currentProject.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "untitled";
+                    const projName = currentRepository ? currentRepository.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "untitled";
                     const promptLen = `archbench:${projName}$ `.length;
                     term.write("\r" + " ".repeat(promptLen + terminalInputBufferRef.current.length + 10) + "\r");
                     writePrompt();
@@ -186,8 +186,8 @@ export const TerminalConsole: React.FC = () => {
                             } else if (cmd === 'arch') {
                                 const sub = args[1] ? args[1].toLowerCase() : "";
                                 if (sub === 'parse') {
-                                    term.writeln(`\x1b[35m[Parsing Workspace Project: ${currentProject ? currentProject.title : "Untitled"}]\x1b[0m`);
-                                    term.writeln(`- Specification Version: ${currentProject ? currentProject.version : "1.0"}`);
+                                    term.writeln(`\x1b[35m[Parsing Workspace Repository: ${currentRepository ? currentRepository.title : "Untitled"}]\x1b[0m`);
+                                    term.writeln(`- Specification Version: ${currentRepository ? currentRepository.version : "1.0"}`);
                                     term.writeln(`- Components (Nodes): ${nodes.length} loaded`);
                                     term.writeln(`- Dependencies (Connections): ${connections.length} loaded`);
                                     term.writeln(`- Workflows (Flows): ${flows.length} loaded`);
@@ -251,7 +251,7 @@ export const TerminalConsole: React.FC = () => {
                                     return;
                                 } else if (sub === 'export') {
                                     term.writeln("Exporting Markdown specification...");
-                                    const md = exportProjectToMarkdown(currentProject!);
+                                    const md = exportProjectToMarkdown(currentRepository!);
                                     term.writeln(md.substring(0, 150) + "...\n(Download triggered on main browser thread)");
                                 } else {
                                     term.writeln("Subcommand not recognized: " + sub);
@@ -307,7 +307,7 @@ export const TerminalConsole: React.FC = () => {
                 terminalInstanceRef.current = null;
             }
         };
-    }, [terminalActiveTab, isCollapsed, currentProject]);
+    }, [terminalActiveTab, isCollapsed, currentRepository]);
 
     // ResizeObserver tracks shell container size to call .fit()
     useEffect(() => {
@@ -342,7 +342,7 @@ export const TerminalConsole: React.FC = () => {
             return;
         }
         const md = activeFlow 
-            ? generateExecutionLogMarkdown(activeFlow, activeStepIndex, nodes, currentProject?.version)
+            ? generateExecutionLogMarkdown(activeFlow, activeStepIndex, nodes, currentRepository?.version)
             : `# Batch Audit Run Summary\n\nTimestamp: ${new Date(unifiedBatchLog?.timestamp || '').toLocaleString()}`;
         
         navigator.clipboard.writeText(md).then(() => {
@@ -361,7 +361,7 @@ export const TerminalConsole: React.FC = () => {
             );
             lines.push(
                 <div key="sys-ts" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '8px', marginBottom: '6px' }}>
-                    [sys] TIMESTAMP: {new Date().toLocaleTimeString()} | ECOSYSTEM VERSION: {currentProject?.version || "1.0"}
+                    [sys] TIMESTAMP: {new Date().toLocaleTimeString()} | ECOSYSTEM VERSION: {currentRepository?.version || "1.0"}
                 </div>
             );
             lines.push(
@@ -789,6 +789,48 @@ export const TerminalConsole: React.FC = () => {
                             overflow: 'hidden'
                         }}
                     />
+                </div>
+            )}
+
+            {/* Terminal Footer (only when not collapsed) */}
+            {!isCollapsed && (
+                <div style={{
+                    padding: '6px 12px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                    background: 'rgba(5, 6, 11, 0.4)',
+                    fontSize: '9px',
+                    color: 'rgba(255, 255, 255, 0.35)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexShrink: 0
+                }}>
+                    <span>Crafted with 🤍 by Noisy Architects</span>
+                    <a 
+                        href="https://www.netlify.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{ 
+                            color: 'rgba(255, 255, 255, 0.45)', 
+                            textDecoration: 'none', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '5px',
+                            transition: 'color 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)'; }}
+                    >
+                        <span style={{ 
+                            display: 'inline-block',
+                            width: '5px',
+                            height: '5px',
+                            borderRadius: '50%',
+                            background: '#00C7B7',
+                            boxShadow: '0 0 6px #00C7B7'
+                        }} />
+                        Powered by Netlify
+                    </a>
                 </div>
             )}
         </div>

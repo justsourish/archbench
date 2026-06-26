@@ -182,6 +182,15 @@ export function parseMarkdownToProject(md: string): Project {
                     const type = parts[3] || "request";
                     projectData.connections.push([from, to, label, type]);
                 }
+            } else if (line.startsWith("*") || line.startsWith("-")) {
+                const match = line.match(/^[-*]\s*\[\s*([^,\]]+)\s*,\s*([^,\]]+)\s*(?:,\s*([^,\]]+))?\s*(?:,\s*([^,\]]+))?\s*\]/);
+                if (match) {
+                    const from = match[1].trim();
+                    const to = match[2].trim();
+                    const label = match[3] ? match[3].trim() : "";
+                    const type = match[4] ? match[4].trim() : "request";
+                    projectData.connections.push([from, to, label, type]);
+                }
             }
             continue;
         }
@@ -209,6 +218,16 @@ export function parseMarkdownToProject(md: string): Project {
                     currentFlow.subtitle = line.replace(/^\*\s*/, "").replace(/\*$/, "").trim();
                 } else if (line.startsWith("- **Color:**")) {
                     currentFlow.color = line.split(":")[1].replace(/\*/g, "").trim();
+                } else if (line.startsWith("|") && !line.includes("---|")) {
+                    const parts = line.split("|").map(s => s.trim()).filter(s => s !== "");
+                    if (parts.length >= 2 && parts[0].toLowerCase() !== "node") {
+                        currentFlow.steps.push({
+                            node: parts[0],
+                            label: parts[1],
+                            detail: parts[2] || "",
+                            data: parts[3] || ""
+                        });
+                    }
                 } else {
                     const stepMatch = line.match(/^\d+\.\s*\*\*([^*]+)\*\*\s*\[([^\]]+)\]:\s*(.*)/);
                     if (stepMatch) {

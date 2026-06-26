@@ -30,11 +30,15 @@ export const Sidebar: React.FC = () => {
         stepFlow,
         unifiedBatchLog,
         setUnifiedBatchLog,
-        currentProject,
+            currentRepository,
         isSidebarCollapsed,
         isSidebarDockedRight,
         setSidebarCollapsed,
-        setSidebarDockedRight
+        setSidebarDockedRight,
+        workspace,
+        workspaces,
+        deleteWorkspace,
+        updateWorkspaceName
     } = useProjectStore();
 
     const handleTabClick = (tabId: string) => {
@@ -89,6 +93,17 @@ export const Sidebar: React.FC = () => {
     const [batchRunning, setBatchRunning] = useState(false);
     const [batchStatusMsg, setBatchStatusMsg] = useState("No batch audit active.");
     const batchTimerRef = useRef<any | null>(null);
+
+    const [workspaceNameInput, setWorkspaceNameInput] = useState('');
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deleteConfirmNameInput, setDeleteConfirmNameInput] = useState('');
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+    useEffect(() => {
+        if (workspace) {
+            setWorkspaceNameInput(workspace.name);
+        }
+    }, [workspace?.id, workspace?.name]);
 
 
 
@@ -186,8 +201,8 @@ export const Sidebar: React.FC = () => {
     // Compile Markdown Context Pack
     const getContextMarkdown = () => {
         return generateKnowledgePackMarkdown(
-            currentProject?.title || "Untitled Project",
-            currentProject?.version || "1.0",
+                currentRepository?.title || "Untitled Project",
+                currentRepository?.version || "1.0",
             nodes,
             connections,
             flows,
@@ -341,11 +356,11 @@ export const Sidebar: React.FC = () => {
                 exitFlow();
 
                 // Compute report and save
-                const activeProjId = currentProject?.id || 'demo-sample';
+                const activeProjId = currentRepository?.id || 'demo-sample';
                 const health = generateArchitectureHealthReport(baseLog, nodes, connections);
                 const pack = generateKnowledgePackJSON(
-                    currentProject?.title || "Untitled Project",
-                    currentProject?.version || "1.0",
+                    currentRepository?.title || "Untitled Project",
+                    currentRepository?.version || "1.0",
                     nodes,
                     connections,
                     flows,
@@ -476,13 +491,15 @@ export const Sidebar: React.FC = () => {
             className={`flow-playback ${isSidebarDockedRight ? 'dock-right' : 'dock-left'} ${isSidebarCollapsed ? 'collapsed' : ''}`} 
             id="flow-playback"
             style={{
-                position: 'relative',
+                position: 'fixed',
                 top: 0,
-                height: '100%',
-                zIndex: 10,
+                bottom: 0,
+                [isSidebarDockedRight ? 'right' : 'left']: 0,
+                height: '100vh',
+                zIndex: 250,
                 width: isSidebarCollapsed ? '48px' : '400px',
                 minWidth: isSidebarCollapsed ? '48px' : '400px',
-                transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+                transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1), left 0.2s cubic-bezier(0.16, 1, 0.3, 1), right 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
         >
             <div className="fp-header" id="fp-header" style={{ userSelect: 'none' }}>
@@ -515,16 +532,12 @@ export const Sidebar: React.FC = () => {
 
             {/* Tab buttons activity bar */}
             <div className="fp-tabs" id="fp-tabs">
-                <button className={`fp-tab ${sidebarTab === 'ai' ? 'active' : ''}`} onClick={() => handleTabClick('ai')} title="AI System Architect">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v2"/><path d="M15 1v2"/><path d="M9 21v2"/><path d="M15 21v2"/><path d="M1 9h2"/><path d="M1 15h2"/><path d="M21 9h2"/><path d="M21 15h2"/></svg>
-                </button>
                 <button className={`fp-tab ${sidebarTab === 'simulator' ? 'active' : ''}`} onClick={() => handleTabClick('simulator')} title="Trace Flow Simulator">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </button>
                 <button className={`fp-tab ${sidebarTab === 'batch' ? 'active' : ''}`} onClick={() => handleTabClick('batch')} title="Flow Checklist & Audit">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </button>
-                {/* Execution log tab removed */}
                 <button className={`fp-tab ${sidebarTab === 'health' ? 'active' : ''}`} onClick={() => handleTabClick('health')} title="Architecture Health Report">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 </button>
@@ -534,12 +547,26 @@ export const Sidebar: React.FC = () => {
                 <button className={`fp-tab ${sidebarTab === 'pack' ? 'active' : ''}`} onClick={() => handleTabClick('pack')} title="Markdown Knowledge Pack">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><polygon points="12 22.08 12 12 3 6.92 3 17.08 12 22.08"/><polygon points="12 22.08 12 12 21 6.92 21 17.08 12 22.08"/><polygon points="12 12 3 6.92 12 1.84 21 6.92 12 12"/></svg>
                 </button>
+                <button className={`fp-tab ${sidebarTab === 'ai' ? 'active' : ''}`} onClick={() => handleTabClick('ai')} title="AI System Architect (Beta)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v2"/><path d="M15 1v2"/><path d="M9 21v2"/><path d="M15 21v2"/><path d="M1 9h2"/><path d="M1 15h2"/><path d="M21 9h2"/><path d="M21 15h2"/></svg>
+                </button>
 
+
+                <button 
+                    className={`fp-tab ${sidebarTab === 'settings' ? 'active' : ''}`} 
+                    onClick={() => handleTabClick('settings')} 
+                    title="Workspace Settings"
+                    style={{ marginTop: 'auto' }}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                    </svg>
+                </button>
 
                 <button 
                     className="fp-tab fp-tab-toggle" 
                     style={{ 
-                        marginTop: 'auto', 
                         background: 'rgba(180, 130, 255, 0.12)',
                         color: 'hsl(280, 95%, 75%)',
                         boxShadow: '0 -2px 10px rgba(0,0,0,0.3)',
@@ -571,6 +598,23 @@ export const Sidebar: React.FC = () => {
                     {/* ── AI SYSTEM ARCHITECT ───────────────────────────────── */}
                     {sidebarTab === 'ai' && (
                         <div className="fp-tab-panel active" id="panel-ai" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                            {/* Beta Warning Banner */}
+                            <div style={{
+                                background: 'rgba(255, 170, 0, 0.08)',
+                                borderBottom: '1px solid rgba(255, 170, 0, 0.15)',
+                                padding: '8px 12px',
+                                fontSize: '10px',
+                                color: 'hsl(40, 95%, 70%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                flexShrink: 0
+                            }}>
+                                <span style={{ fontSize: '12px' }}>⚠️</span>
+                                <span style={{ textAlign: 'left', lineHeight: '1.4' }}>
+                                    <strong>Beta Feature:</strong> This AI feature is under active development. You can pair your own LLM API key, but please note that this is experimental and connections/responses might be unstable.
+                                </span>
+                            </div>
                             <div className="ai-chat-header" style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span className="ai-model-badge" id="ai-model-badge">
                                     {!hasKeys ? "No provider configured" : (aiProvider === 'gemini' ? `Gemini • ${geminiModel}` : aiProvider === 'openai' ? `OpenAI • ${openaiModel}` : `Ollama • ${ollamaModel}`)}
@@ -833,8 +877,47 @@ export const Sidebar: React.FC = () => {
                                     </div>
                                 </>
                             ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
-                                    Select and run a simulation scenario to trigger visual diagram playback.
+                                <div style={{ padding: '16px', overflowY: 'auto', height: '100%' }}>
+                                    <h3 style={{ margin: '0 0 12px 0', fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start Simulation Flow</h3>
+                                    {flows.length === 0 ? (
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '10px', textAlign: 'center' }}>
+                                            No simulation flows defined in this spec.
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {flows.map(flow => (
+                                                <button
+                                                    key={flow.id}
+                                                    onClick={() => startFlow(flow.id)}
+                                                    style={{
+                                                        background: 'rgba(255,255,255,0.02)',
+                                                        border: '1px solid rgba(255,255,255,0.08)',
+                                                        borderRadius: '8px',
+                                                        padding: '12px',
+                                                        textAlign: 'left',
+                                                        cursor: 'pointer',
+                                                        color: '#fff',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '4px',
+                                                        width: '100%',
+                                                        transition: 'border-color 0.2s, background 0.2s'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.borderColor = flow.color || 'hsl(210,85%,62%)';
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                                                    }}
+                                                >
+                                                    <span style={{ fontSize: '11px', fontWeight: 600, color: flow.color || 'hsl(210,85%,62%)' }}>⚡ {flow.title}</span>
+                                                    <span style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.3 }}>{flow.subtitle || 'Run simulation sequence'}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1009,8 +1092,8 @@ export const Sidebar: React.FC = () => {
                                         style={{ flex: 1, fontSize: '10px' }}
                                         onClick={() => {
                                             const json = generateKnowledgePackJSON(
-                                                currentProject?.title || "Untitled Project",
-                                                currentProject?.version || "1.0",
+                                                    currentRepository?.title || "Untitled Project",
+                                                    currentRepository?.version || "1.0",
                                                 nodes,
                                                 connections,
                                                 flows,
@@ -1046,56 +1129,259 @@ export const Sidebar: React.FC = () => {
                                     >
                                         Download MD
                                     </button>
+                            </div>
+                        </div>
+                        </div>
+                    )}
+
+                    {/* ── WORKSPACE SETTINGS ────────────────────────────── */}
+                    {sidebarTab === 'settings' && (
+                        <div className="fp-tab-panel active" id="panel-settings" style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+                            <div style={{ marginBottom: '20px' }}>
+                                <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#fff', margin: '0 0 4px 0' }}>Workspace Settings</h3>
+                                <p style={{ fontSize: '10px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                                    Manage your active workspace parameters and connected repository context configurations.
+                                </p>
+                            </div>
+
+                            {/* Workspace Name Input Card */}
+                            <div style={{
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(255, 255, 255, 0.06)',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                marginBottom: '16px'
+                            }}>
+                                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                                    Workspace Name
+                                </label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input 
+                                        type="text" 
+                                        value={workspaceNameInput} 
+                                        onChange={(e) => setWorkspaceNameInput(e.target.value)}
+                                        style={{
+                                            flex: 1,
+                                            background: 'rgba(0, 0, 0, 0.3)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '4px',
+                                            padding: '6px 10px',
+                                            color: '#fff',
+                                            fontSize: '11px',
+                                            outline: 'none',
+                                            transition: 'border-color 0.2s'
+                                        }}
+                                        onFocus={(e) => e.target.style.borderColor = 'hsl(280, 95%, 75%)'}
+                                        onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+                                    />
+                                    <button 
+                                        className="btn-primary" 
+                                        disabled={!workspaceNameInput.trim() || workspaceNameInput.trim() === (workspace?.name || '')}
+                                        onClick={() => {
+                                            if (workspaceNameInput.trim() && workspace) {
+                                                updateWorkspaceName(workspace.id, workspaceNameInput.trim());
+                                                alert("Workspace name updated successfully!");
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '6px 12px',
+                                            fontSize: '11px',
+                                            borderRadius: '4px',
+                                            background: (workspaceNameInput.trim() && workspaceNameInput.trim() !== (workspace?.name || '')) ? 'hsl(280, 85%, 60%)' : 'rgba(255,255,255,0.05)',
+                                            color: (workspaceNameInput.trim() && workspaceNameInput.trim() !== (workspace?.name || '')) ? '#fff' : 'rgba(255,255,255,0.3)',
+                                            cursor: (workspaceNameInput.trim() && workspaceNameInput.trim() !== (workspace?.name || '')) ? 'pointer' : 'default'
+                                        }}
+                                    >
+                                        Save
+                                    </button>
                                 </div>
+                            </div>
+
+                            {/* Danger Zone Card */}
+                            <div style={{
+                                background: 'rgba(239, 68, 68, 0.02)',
+                                border: '1px solid rgba(239, 68, 68, 0.15)',
+                                borderRadius: '8px',
+                                padding: '12px',
+                                marginTop: 'auto'
+                            }}>
+                                <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'rgb(239, 68, 68)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                                    ⚠️ Danger Zone
+                                </span>
+                                <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+                                    Deleting this workspace will remove all registered repositories, active view state mapping, and purge all spec files and audit logs from your local browser database. Physical folders and files on your computer will remain completely untouched.
+                                </p>
+                                <button 
+                                    onClick={() => {
+                                        if (workspaces.length <= 1) {
+                                            alert("You must keep at least one workspace. Create another workspace first before deleting this one.");
+                                            return;
+                                        }
+                                        setIsDeleteModalOpen(true);
+                                        setDeleteConfirmNameInput('');
+                                        setDeleteConfirmText('');
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        background: 'transparent',
+                                        border: '1px solid rgb(239, 68, 68)',
+                                        borderRadius: '4px',
+                                        color: 'rgb(239, 68, 68)',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        display: 'flex',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgb(239, 68, 68)';
+                                        e.currentTarget.style.color = '#fff';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'transparent';
+                                        e.currentTarget.style.color = 'rgb(239, 68, 68)';
+                                    }}
+                                >
+                                    Delete Workspace...
+                                </button>
                             </div>
                         </div>
                     )}
 
+                </div>
+            )}
 
-
-                    {/* Attribution footer (visible when sidebar is open) */}
+            {/* Delete Confirmation Modal Overlay */}
+            {isDeleteModalOpen && workspace && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(5, 6, 10, 0.85)',
+                    backdropFilter: 'blur(8px)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '20px'
+                }}>
                     <div style={{
-                        marginTop: 'auto',
-                        padding: '10px 16px',
-                        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                        background: 'rgba(5, 6, 11, 0.3)',
-                        fontSize: '9px',
-                        color: 'rgba(255, 255, 255, 0.35)',
+                        background: 'rgba(15, 17, 28, 0.95)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        borderRadius: '12px',
+                        maxWidth: '420px',
+                        width: '100%',
+                        padding: '24px',
+                        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '4px'
+                        gap: '16px'
                     }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>Crafted with 🤍 by Noisy Architects</span>
-                            <span style={{ opacity: 0.6 }}>v1.0.0</span>
+                        <div>
+                            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#fff', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: 'rgb(239, 68, 68)' }}>⚠️</span> Delete Workspace?
+                            </h3>
+                            <p style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.6)', margin: 0, lineHeight: 1.5 }}>
+                                This action is permanent and cannot be undone. To proceed, please confirm you want to delete <strong style={{ color: '#fff' }}>{workspace.name}</strong>.
+                            </p>
                         </div>
-                        <a 
-                            href="https://www.netlify.com" 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            style={{ 
-                                color: 'rgba(255, 255, 255, 0.45)', 
-                                textDecoration: 'none', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '5px',
-                                transition: 'color 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)'; }}
-                        >
-                            <span style={{ 
-                                display: 'inline-block',
-                                width: '5px',
-                                height: '5px',
-                                borderRadius: '50%',
-                                background: '#00C7B7',
-                                boxShadow: '0 0 6px #00C7B7'
-                            }} />
-                            Powered by Netlify
-                        </a>
-                    </div>
 
+                        {/* Instruction and Validation Form */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                                    Type the workspace name to confirm: <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>({workspace.name})</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={deleteConfirmNameInput}
+                                    onChange={(e) => setDeleteConfirmNameInput(e.target.value)}
+                                    placeholder={workspace.name}
+                                    style={{
+                                        width: '100%',
+                                        background: 'rgba(0, 0, 0, 0.4)',
+                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                        borderRadius: '6px',
+                                        padding: '8px 12px',
+                                        color: '#fff',
+                                        fontSize: '12px',
+                                        outline: 'none'
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                                    Type <span style={{ color: 'rgb(239, 68, 68)', fontWeight: 800 }}>DELETE</span> to finalize:
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={deleteConfirmText}
+                                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                    placeholder="DELETE"
+                                    style={{
+                                        width: '100%',
+                                        background: 'rgba(0, 0, 0, 0.4)',
+                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                        borderRadius: '6px',
+                                        padding: '8px 12px',
+                                        color: '#fff',
+                                        fontSize: '12px',
+                                        outline: 'none'
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                            <button 
+                                className="btn-secondary" 
+                                onClick={() => setIsDeleteModalOpen(false)}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px 16px',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    borderRadius: '6px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={async () => {
+                                    if (deleteConfirmNameInput === workspace.name && deleteConfirmText === 'DELETE') {
+                                        setIsDeleteModalOpen(false);
+                                        await deleteWorkspace(workspace.id);
+                                        setSidebarTab('simulator'); // Switch back to a safe default tab
+                                        alert("Workspace deleted successfully.");
+                                    }
+                                }}
+                                disabled={deleteConfirmNameInput !== workspace.name || deleteConfirmText !== 'DELETE'}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px 16px',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    borderRadius: '6px',
+                                    background: (deleteConfirmNameInput === workspace.name && deleteConfirmText === 'DELETE') ? 'rgb(239, 68, 68)' : 'rgba(239, 68, 68, 0.1)',
+                                    color: (deleteConfirmNameInput === workspace.name && deleteConfirmText === 'DELETE') ? '#fff' : 'rgba(239, 68, 68, 0.4)',
+                                    border: 'none',
+                                    cursor: (deleteConfirmNameInput === workspace.name && deleteConfirmText === 'DELETE') ? 'pointer' : 'not-allowed',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                Delete Workspace
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

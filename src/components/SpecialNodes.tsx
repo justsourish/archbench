@@ -3,14 +3,14 @@ import { NodeProps } from 'reactflow';
 import { useProjectStore } from '../store/useProjectStore';
 
 export const LayerZoneNode: React.FC<NodeProps> = ({ data }) => {
-    const { label, height, className } = data;
+    const { label, height, className, width = '6000px', left = '-2500px' } = data;
     return (
         <div 
             className={`layer-zone ${className || 'services'}`}
             style={{ 
                 height: `${height}px`,
-                width: '6000px', // extremely wide to cover horizontal scrolls
-                left: '-2500px', // offset to center it horizontally relative to node coordinate space
+                width: typeof width === 'number' ? `${width}px` : width,
+                left: typeof left === 'number' ? `${left}px` : left,
                 position: 'absolute',
                 borderTop: '1px dashed rgba(255,255,255,0.035)',
                 pointerEvents: 'none',

@@ -25,7 +25,7 @@
     --layer-future: rgba(255,180,80,0.01);
 
     --topbar-h: 52px;
-    --flowbar-h: 44px;
+    --flowbar-h: 0px;
     --total-header: calc(var(--topbar-h) + var(--flowbar-h));
 }
 
@@ -419,11 +419,7 @@ html, body {
 /* ── Flow Playback Panel ─────────────────────────────────────── */
 
 .flow-playback {
-    position: fixed;
     z-index: 180;
-    top: var(--total-header) !important;
-    bottom: 0 !important;
-    height: calc(100vh - var(--total-header)) !important;
     background: rgba(10,12,22,0.96);
     backdrop-filter: blur(24px) saturate(1.5);
     -webkit-backdrop-filter: blur(24px) saturate(1.5);
@@ -445,8 +441,6 @@ html, body {
 
 /* Dock Right (Default) */
 .flow-playback.dock-right {
-    right: 0 !important;
-    left: auto !important;
     width: 400px;
     grid-template-columns: 48px 1fr;
     grid-template-areas: 
@@ -462,8 +456,6 @@ html, body {
 
 /* Dock Left */
 .flow-playback.dock-left {
-    left: 0 !important;
-    right: auto !important;
     width: 400px;
     grid-template-columns: 48px 1fr;
     grid-template-areas: 
@@ -896,12 +888,12 @@ body:has(.flow-playback.hidden) .viewport {
     gap: 8px;
 }
 
-.project-selector-container {
+.workspace-selector-container {
     position: relative;
     display: inline-block;
 }
 
-.btn-project-selector {
+.btn-workspace-selector {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -918,7 +910,7 @@ body:has(.flow-playback.hidden) .viewport {
     transition: all 0.2s ease;
 }
 
-.project-selector-label {
+.workspace-selector-label {
     color: var(--text-muted);
     font-size: 10px;
     font-weight: 700;
@@ -926,7 +918,7 @@ body:has(.flow-playback.hidden) .viewport {
     text-transform: uppercase;
 }
 
-#current-project-title {
+#current-workspace-title {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -934,7 +926,7 @@ body:has(.flow-playback.hidden) .viewport {
     white-space: nowrap;
 }
 
-.btn-project-selector:hover {
+.btn-workspace-selector:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);
 }
@@ -1946,5 +1938,68 @@ body:has(.flow-playback.hidden) .viewport {
 }
 .watch-dot-pulse {
     animation: watch-pulse 2s infinite ease-in-out;
+}
+
+/* ── Viewport Tabs (Workspace vs Projects) ── */
+.viewport-tabs-bar {
+    display: flex;
+    background: rgba(10, 12, 22, 0.65);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 8px 16px 0 16px;
+    gap: 6px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 100;
+}
+
+.viewport-tab-button {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.45);
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.viewport-tab-button:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.viewport-tab-button.active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 2px solid hsl(280, 85%, 65%);
+}
+
+/* ── Workspace Folder Cards Styling ── */
+.workspace-member-card {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    gap: 6px;
+    transition: all 0.2s ease-in-out;
+}
+
+.workspace-member-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.workspace-member-card.active {
+    background: rgba(180, 130, 255, 0.04);
+    border-color: rgba(180, 130, 255, 0.45);
+    box-shadow: 0 0 12px rgba(180, 130, 255, 0.12);
 }
 

@@ -1,43 +1,42 @@
 import React, { useState, useRef } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { parseMarkdownToProject, validateProjectData } from '../utils/parser';
-import { Project, NodeData, ConnectionData, Flow } from '../types';
+import { Repository, ConnectionData, Flow, NodeData, FlowStep } from '../types';
 
 interface WizardModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
+interface ConnectedRepo {
+    handle: FileSystemDirectoryHandle;
+    status: 'ready' | 'needs_init';
+    scannedSpec?: Repository;
+    needsInit?: boolean;
+}
+
 export const WizardModal: React.FC<WizardModalProps> = ({ isOpen, onClose }) => {
-    const createProject = useProjectStore(s => s.createProject);
+    const createProject = useProjectStore(s => s.createRepository);
+    const createWorkspace = useProjectStore(s => s.createWorkspace);
+    const setProjectHandles = useProjectStore(s => s.setProjectHandles);
+    const currentProject = useProjectStore(s => s.currentRepository);
 
     // Navigation State:
     // 1: Intent Selection (Existing Codebase vs New System Design)
-    // 2: Workspace Type Selection (Single vs Multi Repo)
-    // 'single': Single Repo Configuration
-    // 'multi': Multi Repo Configuration
-    // 'prompt': Copier prompt after scaffolding with Live Watch status
-    const [step, setStep] = useState<1 | 2 | 'single' | 'multi' | 'prompt'>(1);
+    // 2: Workspace Configuration (Workspace Name, add connected project folders)
+    // 'prompt': Copier instructions and active watch status after scaffolding
+    const [step, setStep] = useState<1 | 2 | 'prompt'>(1);
     const [intent, setIntent] = useState<'existing' | 'new' | null>(null);
 
-    // Shared Form States
+    // Workspace & Repositories Setup States
     const [workspaceName, setWorkspaceName] = useState('');
-    const [workspaceRootHandle, setWorkspaceRootHandle] = useState<any | null>(null);
-    const [scannedSpec, setScannedSpec] = useState<Project | null>(null);
-    const [scaffoldNeeded, setScaffoldNeeded] = useState(false);
-    const [scanStatus, setScanStatus] = useState<{
-        type: 'loading' | 'success' | 'skeleton' | 'error';
-        message?: string;
-        details?: React.ReactNode;
-    } | null>(null);
-
-    // Multi-Repo States
-    const [reposList, setReposList] = useState<string[]>([]);
+    const [connectedProjects, setConnectedProjects] = useState<ConnectedRepo[]>([]);
     
     // Prompt State
     const [agentPromptText, setAgentPromptText] = useState('');
 
     const folderInputRef = useRef<HTMLInputElement>(null);
+    const isScaffoldOnly = currentProject?.flows?.some((f: Flow) => f.id === "main_scaffold_flow") ?? true;
 
     if (!isOpen) return null;
 
@@ -72,10 +71,39 @@ You are a senior systems architect. Your task is to analyze the codebase and wri
 Format rules:
 1. Every component must be defined in the \`## Nodes\` section.
    Use the categories: "Entry Point", "Service", "Infrastructure", or "Boundary".
-2. Connections must be defined in the \`## Connections\` section as:
-   * [from_node_id, to_node_id, interaction_label, type]
+   Layout guidelines:
+   - Entry Points (UI, clients): x = 200 to 500, y = 250
+   - Services (APIs, auth, workers): x = 500 to 1800, y = 750
+   - Infrastructure (DBs, caches, queues): x = 500 to 1800, y = 1390
+   - Boundary/Future: y = 1960
+
+2. Connections MUST be defined in the \`## Connections\` section as a Markdown table:
+   | From | To | Interaction | Type |
+   |---|---|---|---|
+   | [from_node_id] | [to_node_id] | [interaction_label] | [type] |
+   
    Where type is "request", "data", or "future".
-3. Simulation pathways must be detailed in the \`## Flows\` section.
+
+   Connection Discovery Checklist:
+   Before finalizing connections, scan for:
+   - API calls
+   - Service-to-service communication
+   - Database reads and writes
+   - Cache reads and writes
+   - Message queues and event buses
+   - Webhooks and file storage access
+   - Authentication providers and third-party integrations
+
+   ⚠️ Note: Missing a connection is worse than creating an extra one. Prefer over-documentation of dependencies.
+
+3. Simulation pathways must be detailed in the \`## Flows\` section as a numbered list:
+   ### [flow_id] ([Flow Title])
+   *Subtitle / Description*
+   - **Color:** [Optional HSL color]
+
+   1. **[node_id]** [[action_label]]: [action_details]
+      * Data: [Optional JSON or string data context]
+   2. **[node_id]** [[action_label]]: [action_details]
 
 Ensure you update only the \`.arcbench/architecture.md\` file when modifying the layout. Do not change business logic or output other file formats.
 \`\`\`
@@ -83,12 +111,12 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
     };
 
     // Helper: export project spec back to Markdown
-    const exportProjectToMarkdown = (proj: Project): string => {
+    const exportProjectToMarkdown = (proj: Repository): string => {
         let md = `# ${proj.title}\nVersion: ${proj.version || '1.0'}\n`;
         if (proj.description) md += `Description: ${proj.description}\n`;
         md += `\n## Nodes\n`;
         
-        proj.nodes.forEach(n => {
+        proj.nodes.forEach((n: NodeData) => {
             md += `### ${n.id} (${n.category || 'Service'})\n`;
             md += `* **Title:** ${n.title}\n`;
             md += `* **Icon:** ${n.icon}\n`;
@@ -96,9 +124,9 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
             md += `* **y:** ${n.y}\n`;
             if (n.desc || n.description) md += `* **Description:** ${n.desc || n.description}\n`;
             if (n.sections && n.sections.length > 0) {
-                n.sections.forEach(s => {
+                n.sections.forEach((s: any) => {
                     md += `\n#### ${s.label}\n`;
-                    s.items.forEach(it => {
+                    s.items.forEach((it: string) => {
                         md += `* ${it}\n`;
                     });
                 });
@@ -114,18 +142,20 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
 
         md += `## Connections\n`;
         md += `| From | To | Interaction | Type |\n|---|---|---|---|\n`;
-        proj.connections.forEach(([f, t, label, type]) => {
+        proj.connections.forEach(([f, t, label, type]: ConnectionData) => {
             md += `| ${f} | ${t} | ${label} | ${type} |\n`;
         });
 
         if (proj.flows && proj.flows.length > 0) {
-            md += `\n## Flows\n`;
-            proj.flows.forEach(fl => {
-                md += `### ${fl.id}\n`;
-                if (fl.subtitle) md += `Subtitle: ${fl.subtitle}\n`;
-                md += `\n| Node | Action | Detail | Data |\n|---|---|---|---|\n`;
-                fl.steps.forEach(st => {
-                    md += `| ${st.node} | ${st.label} | ${st.detail} | ${st.data || ''} |\n`;
+            md += `\n## Flows\n\n`;
+            proj.flows.forEach((fl: Flow) => {
+                md += `### ${fl.id} (${fl.title || fl.id})\n`;
+                if (fl.subtitle) md += `*${fl.subtitle}*\n`;
+                if (fl.color) md += `- **Color:** ${fl.color}\n`;
+                md += `\n`;
+                fl.steps.forEach((st: FlowStep, idx: number) => {
+                    md += `${idx + 1}. **${st.node}** [${st.label}]: ${st.detail || ""}\n`;
+                    if (st.data) md += `   * Data: ${st.data}\n`;
                 });
                 md += `\n`;
             });
@@ -134,7 +164,7 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
         return md;
     };
 
-    const writeScaffoldFiles = async (dirHandle: any, spec: Project, linkedRepos?: string[]) => {
+    const writeScaffoldFiles = async (dirHandle: FileSystemDirectoryHandle, spec: Repository, linkedRepos?: string[]) => {
         try {
             // Obtain or create .arcbench/ directory
             const arcbenchDir = await dirHandle.getDirectoryHandle(".arcbench", { create: true });
@@ -175,314 +205,154 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                 await wsWritable.write(workspaceContent);
                 await wsWritable.close();
             }
-
-            showToast("📥 Created scaffolding files in .arcbench/ folder!");
         } catch (err) {
             console.error("Failed to write scaffold files directly:", err);
-            showToast("⚠️ Failed to write architecture files directly. Sandbox permission denied.");
+            showToast(`⚠️ Failed to write architecture files in ${dirHandle.name}. Sandbox permission denied.`);
         }
     };
 
-    const processDirectoryOnboarding = async (dirHandle: any, _mode: 'single' | 'multi') => {
-        setScanStatus({ type: 'loading', message: 'Scanning project files...' });
-        setWorkspaceRootHandle(dirHandle);
-        setScannedSpec(null);
-        setScaffoldNeeded(false);
-
-        // Autofill Workspace Name from folder handle name
-        const rawName = dirHandle.name;
-        const formattedName = rawName.split(/[_-]/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "My Workspace";
-        setWorkspaceName(formattedName);
+    const handleAddProjectFolder = async () => {
+        if (!('showDirectoryPicker' in window)) {
+            showToast("Your browser does not support the File System Access API. Please use a modern desktop browser.");
+            return;
+        }
 
         try {
-            let specFileHandle = null;
+            const pickerWindow = window as unknown as { showDirectoryPicker: (options?: { mode: string }) => Promise<FileSystemDirectoryHandle> };
+            const dirHandle = await pickerWindow.showDirectoryPicker({ mode: "readwrite" });
+            const name = dirHandle.name;
 
-            // 1. Try to search in .arcbench/architecture.md first
+            // Check if folder is already added
+            if (connectedProjects.some(p => p.handle.name === name)) {
+                showToast("Folder is already connected to this workspace.");
+                return;
+            }
+
+            // Auto-fill Workspace Name from first connected folder if empty
+            if (connectedProjects.length === 0 && !workspaceName.trim()) {
+                const formattedName = name.split(/[_-]/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                setWorkspaceName(formattedName);
+            }
+
+            // Run discovery scan inside this repository folder
+            let status: 'ready' | 'needs_init' = 'needs_init';
+            let parsedSpec: Repository | undefined = undefined;
+
             try {
-                const arcbenchDir = await dirHandle.getDirectoryHandle(".arcbench");
-                specFileHandle = await arcbenchDir.getFileHandle("architecture.md");
+                let specFileHandle = null;
 
-                // If multi-repo and existing workspace: load workspace.json too
+                // Strictly search in .arcbench/architecture.md (no root fallbacks)
                 try {
-                    const wsHandle = await arcbenchDir.getFileHandle("workspace.json");
-                    const wsFile = await wsHandle.getFile();
-                    const wsText = await wsFile.text();
-                    const wsConfig = JSON.parse(wsText);
-                    if (wsConfig && wsConfig.repositories) {
-                        setReposList(wsConfig.repositories);
-                    }
-                } catch (e) {
-                    // Not found or single-repo
-                }
-            } catch (e) {
-                // Not found in .arcbench/ directory, fallback to root folder
-            }
-
-            // 2. Fallback to root directory flat search
-            if (!specFileHandle) {
-                for await (const entry of dirHandle.values()) {
-                    if (entry.kind === "file" && entry.name.toLowerCase() === "architecture.md") {
-                        specFileHandle = entry;
-                        break;
-                    }
-                }
-            }
-
-            if (specFileHandle) {
-                const file = await specFileHandle.getFile();
-                const text = await file.text();
-                const parsed = parseMarkdownToProject(text);
-                validateProjectData(parsed);
-
-                setScannedSpec(parsed);
-                setWorkspaceName(parsed.title);
-                setScanStatus({
-                    type: 'success',
-                    details: (
-                        <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(76, 175, 80, 0.05)', border: '1px solid rgba(76, 175, 80, 0.2)', textAlign: 'left' }}>
-                            <div style={{ fontWeight: 700, fontSize: '11px', color: 'hsl(150, 75%, 70%)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>✅</span> EXISTING SPECIFICATION FOUND
-                            </div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                                Found <code>architecture.md</code> in your workspace! We parsed it successfully:<br />
-                                • <strong>Title:</strong> {parsed.title}<br />
-                                • <strong>Components:</strong> {parsed.nodes.length} nodes, {parsed.connections.length} connections.<br />
-                                • <strong>Status:</strong> Live Watch is ready to sync edits automatically.
-                            </div>
-                        </div>
-                    )
-                });
-            } else {
-                // No architecture.md exists, heuristic scan to compile baseline template nodes
-                let hasClient = false, hasApi = false, hasDb = false, hasAuth = false, hasWorker = false;
-                const detectedFolders: string[] = [];
-                const IGNORE_DIRS = new Set(["node_modules", ".git", ".github", "dist", "build", "target", "out", ".next", "cache", "tmp", "vendor"]);
-
-                const traverse = async (handle: any, currentDepth = 1) => {
-                    if (currentDepth > 3) return;
-                    try {
-                        for await (const entry of handle.values()) {
-                            if (entry.kind === "directory") {
-                                const name = entry.name.toLowerCase();
-                                if (IGNORE_DIRS.has(name)) continue;
-
-                                let matched = false;
-                                if (name.includes("auth")) { hasAuth = true; matched = true; }
-                                if (name.includes("worker") || name.includes("queue") || name.includes("job")) { hasWorker = true; matched = true; }
-                                if (name.includes("db") || name.includes("database") || name.includes("postgres") || name.includes("mysql") || name.includes("redis") || name.includes("mongo")) { hasDb = true; matched = true; }
-                                if (name.includes("client") || name.includes("frontend") || name.includes("web") || name.includes("app") || name.includes("ui") || name.includes("pages")) { hasClient = true; matched = true; }
-                                if (name.includes("api") || name.includes("backend") || name.includes("server") || name.includes("controller") || name.includes("routes")) { hasApi = true; matched = true; }
-
-                                if (matched || currentDepth === 1) {
-                                    if (detectedFolders.length < 10) {
-                                        detectedFolders.push(entry.name);
-                                    }
-                                }
-                                await traverse(entry, currentDepth + 1);
-                            } else if (entry.kind === "file") {
-                                const name = entry.name.toLowerCase();
-                                if (name === "docker-compose.yml" || name === "docker-compose.yaml") {
-                                    hasDb = true;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn("Traverse access restricted or failed:", e);
-                    }
-                };
-
-                await traverse(dirHandle, 1);
-
-                const nodesList: NodeData[] = [];
-                const connectionsList: ConnectionData[] = [];
-
-                if (hasClient || (!hasApi && !hasDb)) {
-                    nodesList.push({
-                        id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250,
-                        desc: "Web client user portal interface."
-                    });
-                }
-                if (hasAuth) {
-                    nodesList.push({
-                        id: "auth", category: "Service", title: "Auth Service", icon: "🔒", color: "hsl(280,85%,75%)", x: 550, y: 550,
-                        desc: "Authentication and session control gateway."
-                    });
-                }
-                if (hasApi || hasWorker || hasDb) {
-                    nodesList.push({
-                        id: "api", category: "Service", title: "Backend API", icon: "⚙️", color: "hsl(200,80%,58%)", x: 550, y: 250,
-                        desc: "Core application controller API."
-                    });
-                }
-                if (hasWorker) {
-                    nodesList.push({
-                        id: "worker", category: "Service", title: "Job Processor", icon: "📨", color: "hsl(28,85%,58%)", x: 800, y: 550,
-                        desc: "Task worker and queue executor."
-                    });
-                }
-                if (hasDb) {
-                    nodesList.push({
-                        id: "db", category: "Infrastructure", title: "Database Store", icon: "🗄️", color: "hsl(170,70%,50%)", x: 800, y: 250,
-                        desc: "Primary database database storage."
-                    });
+                    const arcbenchDir = await dirHandle.getDirectoryHandle(".arcbench");
+                    specFileHandle = await arcbenchDir.getFileHandle("architecture.md");
+                } catch {
+                    // Not found in .arcbench
                 }
 
-                if (nodesList.length === 0) {
-                    nodesList.push(
-                        { id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250, desc: "Default client interface." },
-                        { id: "api", category: "Service", title: "Core Service", icon: "⚙️", color: "hsl(200,80%,58%)", x: 750, y: 250, desc: "Default API controller." }
-                    );
-                }
-
-                const nodeIds = nodesList.map(n => n.id);
-                if (nodeIds.includes("client") && nodeIds.includes("api")) {
-                    connectionsList.push(["client", "api", "HTTPS Request", "request"]);
-                }
-                if (nodeIds.includes("api") && nodeIds.includes("auth")) {
-                    connectionsList.push(["api", "auth", "Verify Tokens", "request"]);
-                }
-                if (nodeIds.includes("api") && nodeIds.includes("worker")) {
-                    connectionsList.push(["api", "worker", "Queue Task", "data"]);
-                }
-                if (nodeIds.includes("api") && nodeIds.includes("db")) {
-                    connectionsList.push(["api", "db", "Read/Write SQL", "data"]);
-                }
-                if (nodeIds.includes("worker") && nodeIds.includes("db")) {
-                    connectionsList.push(["worker", "db", "Update Job Status", "data"]);
-                }
-
-                const flowSteps = nodesList.map(n => ({
-                    node: n.id,
-                    label: `Process at ${n.title}`,
-                    detail: `Scaffolded execution step at ${n.title}.`,
-                    data: `{"scaffold": true}`
-                }));
-
-                const flowsList: Flow[] = [{
-                    id: "main_scaffold_flow",
-                    title: "Scaffold Demo Flow",
-                    subtitle: "Automatically generated walk-through simulation",
-                    steps: flowSteps
-                }];
-
-                const spec: Project = {
-                    id: "project-" + Date.now(),
-                    title: formattedName,
-                    version: "1.0",
-                    nodes: nodesList,
-                    connections: connectionsList,
-                    flows: flowsList
-                };
-
-                setScannedSpec(spec);
-                setScaffoldNeeded(true);
-
-                setScanStatus({
-                    type: 'skeleton',
-                    details: (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
-                            <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(255, 152, 0, 0.05)', border: '1px solid rgba(255, 152, 0, 0.25)' }}>
-                                <div style={{ fontWeight: 700, fontSize: '11px', color: 'hsl(38, 95%, 70%)', marginBottom: '4px' }}>
-                                    ⚡ SKELETON SPEC REQUIRED
-                                </div>
-                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                                    We did not find <code>architecture.md</code> in this directory. We will write initial specs directly into your folder:<br />
-                                    • 📄 <code>.arcbench/architecture.md</code> (blank layout)<br />
-                                    • 📄 <code>.arcbench/PROJECT_RULES.md</code> (AI agent prompts)<br />
-                                    • 📄 <code>.arcbench/metadata.json</code> (workspace context)
-                                </div>
-                            </div>
-                        </div>
-                    )
-                });
-            }
-        } catch (err: any) {
-            console.error("Folder resolution error:", err);
-            setScanStatus({
-                type: 'error',
-                message: `Directory scan failed: ${err.message}`
-            });
-        }
-    };
-
-    const handleBrowseWorkspaceRootClick = async (mode: 'single' | 'multi') => {
-        if ((window as any).showDirectoryPicker) {
-            try {
-                const dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
-                await processDirectoryOnboarding(dirHandle, mode);
-            } catch (err) {
-                console.warn("Directory selection cancelled or failed:", err);
-            }
-        } else {
-            showToast("Your browser does not support the File System Access API. Please use a modern desktop browser.");
-        }
-    };
-
-    const handleAddRepoFolderClick = async () => {
-        if ((window as any).showDirectoryPicker) {
-            try {
-                const dirHandle = await (window as any).showDirectoryPicker({ mode: "read" });
-                const name = dirHandle.name;
-                if (!reposList.includes(name)) {
-                    setReposList([...reposList, name]);
+                if (specFileHandle) {
+                    const file = await specFileHandle.getFile();
+                    const text = await file.text();
+                    parsedSpec = parseMarkdownToProject(text);
+                    validateProjectData(parsedSpec);
+                    status = 'ready';
                 }
             } catch (err) {
-                console.warn("Folder picker cancelled:", err);
+                console.warn(`Spec discovery skipped or failed for ${name}, will scaffold:`, err);
             }
-        } else {
-            showToast("Folder Picker API is not available on this browser.");
+
+            const newProject: ConnectedRepo = {
+                handle: dirHandle,
+                status,
+                scannedSpec: parsedSpec
+            };
+
+            setConnectedProjects([...connectedProjects, newProject]);
+        } catch (err) {
+            console.warn("Folder selection cancelled:", err);
         }
     };
 
     const handleCreateWorkspace = async () => {
-        if (!workspaceRootHandle) return;
+        if (connectedProjects.length === 0) return;
 
-        const specToLoad = scannedSpec ? { ...scannedSpec } : {
+        // "Create Workspace" should always create an isolated container first.
+        const targetWorkspaceName = workspaceName.trim() || connectedProjects[0].handle.name;
+        createWorkspace(targetWorkspaceName);
+
+        // Collect handles and check scaffolding needs
+        const projectFolderHandles = connectedProjects.map(p => p.handle);
+        let anyScaffoldNeeded = false;
+
+        // If intent is New System Design, everything needs scaffolding.
+        // Otherwise, check repository status metrics.
+        const projectsToInitialize = connectedProjects.map(p => {
+            const needsInit = p.needsInit || p.status === 'needs_init' || intent === 'new';
+            if (needsInit) anyScaffoldNeeded = true;
+            return {
+                ...p,
+                needsInit
+            };
+        });
+
+        // Generate visual layout specifications for the loaded Workspace
+        // (V1 loads the first project's spec, or creates a blank fallback)
+        const primaryProject = projectsToInitialize[0];
+        const specToLoad = primaryProject.scannedSpec ? { ...primaryProject.scannedSpec } : {
             id: "project-" + Date.now(),
-            title: workspaceName.trim() || "My Workspace",
+            title: targetWorkspaceName,
             version: "1.0",
-            nodes: [],
-            connections: [],
-            flows: []
+            nodes: [
+                { id: "client", category: "Entry Point", title: "Web Frontend", icon: "💻", color: "hsl(210,85%,62%)", x: 300, y: 250, desc: "Default client interface." },
+                { id: "api", category: "Service", title: "Core Service", icon: "⚙️", color: "hsl(200,80%,58%)", x: 750, y: 250, desc: "Default API controller." }
+            ],
+            connections: [
+                ["client", "api", "HTTPS Request", "request"]
+            ] as ConnectionData[],
+            flows: [
+                {
+                    id: "main_scaffold_flow",
+                    title: "Scaffold Demo Flow",
+                    subtitle: "Automatically generated walkthrough simulation",
+                    steps: [
+                        { node: "client", label: "Process at Web Frontend", detail: "Scaffolded execution step." },
+                        { node: "api", label: "Process at Core Service", detail: "Scaffolded execution step." }
+                    ]
+                }
+            ] as Flow[]
         };
 
-        if (workspaceName.trim()) {
-            specToLoad.title = workspaceName.trim();
+        specToLoad.title = targetWorkspaceName;
+
+        // 1. Write scaffolding files to each folder requiring initialization
+        const repoNames = projectFolderHandles.map(h => h.name);
+        for (const proj of projectsToInitialize) {
+            if (proj.needsInit) {
+                await writeScaffoldFiles(proj.handle, specToLoad, repoNames.length > 1 ? repoNames : undefined);
+            }
         }
 
-        const linkedRepos = step === 'multi' ? reposList : undefined;
-
-        // Perform scaffolding if missing or if intent is new project configuration
-        const reallyScaffold = scaffoldNeeded || intent === 'new' || !scannedSpec;
-
-        if (reallyScaffold) {
-            await writeScaffoldFiles(workspaceRootHandle, specToLoad, linkedRepos);
-        }
-
-        // Save active workspace root to store
+        // 2. Register projects list in Zustand Store and enable Live Watch
         createProject(specToLoad);
-        useProjectStore.getState().setWatchDirectoryHandle(workspaceRootHandle);
+        setProjectHandles(projectFolderHandles, targetWorkspaceName);
         useProjectStore.getState().setLiveWatchEnabled(true);
 
-        // If no scaffold was needed (existing spec found), directly open and close modal
-        if (!reallyScaffold) {
+        // 3. Direct Exit Check: If no files were scaffolded (spec existed), open immediately
+        if (!anyScaffoldNeeded) {
             showToast(`Workspace '${specToLoad.title}' loaded successfully!`);
             onClose();
             return;
         }
 
-        // Otherwise (scaffold was written), present agent system prompts & active watch indicator
-        if (step === 'single') {
+        // 4. Scaffold was written: Present AI agent prompts
+        if (projectFolderHandles.length === 1) {
             const prompt = `You are a senior system architect. I have initialized an ArchBench workspace in my repository folder. Analyze my codebase files and write the architecture specification directly into .arcbench/architecture.md, following the format rules in .arcbench/PROJECT_RULES.md. Do not output explanations, only write the markdown code.`;
             setAgentPromptText(prompt);
-            setStep('prompt');
         } else {
-            // Multi-repo instructions
-            const repoNamesList = linkedRepos && linkedRepos.length > 0 ? linkedRepos.join(", ") : "repositories";
-            const prompt = `You are a senior system architect. I have initialized an ArchBench multi-repository workspace. The connected repositories are: ${repoNamesList}. The linked folders are tracked in .arcbench/workspace.json. Analyze these directories and write the unified architecture specification directly into .arcbench/architecture.md, following the format rules in .arcbench/PROJECT_RULES.md. Do not output explanations, only write the markdown code.`;
+            const namesList = repoNames.join(", ");
+            const prompt = `You are a senior system architect. I have initialized an ArchBench multi-repository workspace. The connected repositories are: ${namesList}. The connected folders are tracked in .arcbench/workspace.json. Analyze these directories and write the unified architecture specification directly into .arcbench/architecture.md, following the format rules in .arcbench/PROJECT_RULES.md. Do not output explanations, only write the markdown code.`;
             setAgentPromptText(prompt);
-            setStep('prompt');
         }
+        setStep('prompt');
     };
 
     const handleSelectIntent = (selectedIntent: 'existing' | 'new') => {
@@ -498,27 +368,29 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                         <span style={{ background: 'linear-gradient(135deg, hsl(270,70%,60%), hsl(310,65%,62%))', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#fff', fontWeight: 700 }}>Workspace</span>
                         Create Workspace
                     </span>
-                    <button type="button" className="modal-close" title="Close" onClick={onClose}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
+                    {!(step === 'prompt' && isScaffoldOnly) && (
+                        <button type="button" className="modal-close" title="Close" onClick={onClose}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    )}
                 </div>
 
                 <div className="modal-body" style={{ padding: '20px' }}>
                     {step === 1 && (
                         <div>
                             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '20px', textAlign: 'center', lineHeight: '1.4' }}>
-                                Connect your local project. Prepare guidelines and scaffold files for your coding AI agents.
+                                Connect your local repositories. Prepare guidelines and scaffold files for your coding AI agents.
                             </div>
                             <div className="wizard-options" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => handleSelectIntent('existing')}>
                                     <div style={{ fontSize: '20px', marginBottom: '6px' }}>🔍</div>
                                     <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>Existing Codebase</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Connect an existing codebase repository folder. We scan folders and load or create spec files.</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Connect one or more folders containing codebase repositories. We scan for architecture spec folders.</div>
                                 </button>
                                 <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => handleSelectIntent('new')}>
                                     <div style={{ fontSize: '20px', marginBottom: '6px' }}>💡</div>
                                     <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>New System Design</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Start a brand new architecture layout. Creates boilerplate templates in a clean directory folder.</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Start a brand new architecture layout. Creates template folders inside connected directories.</div>
                                 </button>
                             </div>
                         </div>
@@ -526,59 +398,62 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
 
                     {step === 2 && (
                         <div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '20px', textAlign: 'center', lineHeight: '1.4' }}>
-                                {intent === 'existing' ? "How is your existing codebase structured?" : "How would you like to structure this new design?"}
-                            </div>
-                            <div className="wizard-options" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => setStep('single')}>
-                                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>📦</div>
-                                    <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>Single Repository</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Connect a single folder containing your repository code and `.arcbench/` layout files.</div>
-                                </button>
-                                <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', textAlign: 'left', cursor: 'pointer', display: 'block', width: '100%' }} onClick={() => setStep('multi')}>
-                                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>🗃️</div>
-                                    <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-primary)', marginBottom: '4px' }}>Multi Repository</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>Create a Workspace Root Folder to group multiple connected codebase sub-directories.</div>
-                                </button>
-                                <button type="button" className="wizard-opt-btn" style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)', background: 'rgba(255,255,255,0.01)', textAlign: 'left', cursor: 'default', display: 'block', width: '100%', opacity: 0.4 }}>
-                                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>🐙</div>
-                                    <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>GitHub Repositories <span style={{ fontSize: '8px', padding: '1px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', marginLeft: '4px' }}>Coming Soon</span></div>
-                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', lineHeight: '1.4' }}>Review structural diffs in pull requests.</div>
-                                </button>
-                            </div>
-                            <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '16px' }}>
-                                <button type="button" className="btn-secondary" onClick={() => setStep(1)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 'single' && (
-                        <div>
-                            {/* Folder Selection First */}
+                            {/* Connected Project Folders List */}
                             <div style={{ marginBottom: '16px', textAlign: 'center' }}>
                                 <div style={{ fontSize: '24px', marginBottom: '6px' }}>📁</div>
-                                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Select Repository Folder</div>
+                                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Project Folders</div>
                                 <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: '1.4' }}>
-                                    Choose the local directory containing your repository.
+                                    {intent === 'existing' ? "Connect the repository folders in this workspace. We will scan them for architecture specs." : "Connect folders where we should scaffold new architecture configs."}
                                 </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                                    {connectedProjects.length === 0 ? (
+                                        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.6, fontStyle: 'italic', padding: '10px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                                            No repository folders connected yet. Click select below.
+                                        </div>
+                                    ) : (
+                                        connectedProjects.map((proj, i) => (
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', fontSize: '10.5px' }}>
+                                                <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{proj.handle.name}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    {intent === 'existing' && (
+                                                        <span style={{ 
+                                                            fontSize: '9px', 
+                                                            padding: '2px 6px', 
+                                                            borderRadius: '3px', 
+                                                            fontWeight: 600,
+                                                            background: proj.status === 'ready' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(255, 152, 0, 0.15)',
+                                                            color: proj.status === 'ready' ? 'hsl(150, 75%, 70%)' : 'hsl(38, 95%, 70%)' 
+                                                        }}>
+                                                            {proj.status === 'ready' ? '✓ Ready' : '⚡ Needs Initialization'}
+                                                        </span>
+                                                    )}
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setConnectedProjects(connectedProjects.filter((_, idx) => idx !== i))}
+                                                        style={{ background: 'none', border: 'none', color: 'hsl(0, 72%, 62%)', cursor: 'pointer', fontSize: '10.5px', fontWeight: 600 }}
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
                                 <button 
                                     type="button" 
                                     className="btn-primary" 
-                                    onClick={() => handleBrowseWorkspaceRootClick('single')}
+                                    onClick={handleAddProjectFolder}
                                     style={{ padding: '6px 14px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', cursor: 'pointer', background: 'hsl(270,70%,60%)', border: 'none', color: '#fff' }}
                                 >
-                                    {workspaceRootHandle ? "✓ Connected Folder" : "Select Folder..."}
+                                    + Add Project Folder
                                 </button>
-                                {workspaceRootHandle && (
-                                    <div style={{ fontSize: '9.5px', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '6px', wordBreak: 'break-all' }}>
-                                        Selected: <code>{workspaceRootHandle.name}</code>
-                                    </div>
-                                )}
                             </div>
 
                             {/* Workspace Name Input after selection */}
-                            {workspaceRootHandle && (
-                                <div style={{ marginBottom: '12px', textAlign: 'left' }}>
+                            {connectedProjects.length > 0 && (
+                                <div style={{ marginBottom: '12px', textAlign: 'left', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
                                     <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Workspace Name</label>
                                     <input 
                                         className="form-input" 
@@ -591,126 +466,18 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                 </div>
                             )}
 
-                            {scanStatus && (
-                                <div className="wizard-scan-status" style={{ display: 'block', marginTop: '12px', padding: '12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', fontSize: '11px', border: '1px solid rgba(255,255,255,0.06)', maxHeight: '280px', overflowY: 'auto', textAlign: 'left' }}>
-                                    {scanStatus.type === 'loading' && <span style={{ color: 'hsl(200, 85%, 75%)' }}>{scanStatus.message}</span>}
-                                    {scanStatus.type === 'error' && <span style={{ color: 'hsl(0, 72%, 62%)', fontWeight: 600 }}>❌ {scanStatus.message}</span>}
-                                    {scanStatus.details}
-                                </div>
-                            )}
+
 
                             <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-                                <button type="button" className="btn-secondary" onClick={() => setStep(2)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
+                                <button type="button" className="btn-secondary" onClick={() => setStep(1)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
                                 <button 
                                     type="button" 
                                     className="btn-primary" 
-                                    disabled={!workspaceRootHandle} 
+                                    disabled={connectedProjects.length === 0} 
                                     onClick={handleCreateWorkspace} 
-                                    style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, background: workspaceRootHandle ? 'hsl(270,70%,60%)' : 'rgba(255,255,255,0.05)', border: 'none', color: workspaceRootHandle ? '#fff' : 'rgba(255,255,255,0.3)' }}
+                                    style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, background: connectedProjects.length > 0 ? 'hsl(270,70%,60%)' : 'rgba(255,255,255,0.05)', border: 'none', color: connectedProjects.length > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}
                                 >
-                                    {(scaffoldNeeded || intent === 'new') ? "Generate Scaffold & Open" : "Open Workspace"}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 'multi' && (
-                        <div>
-                            {/* 1. Select Workspace Root Folder */}
-                            <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-                                <div style={{ fontSize: '24px', marginBottom: '6px' }}>📁</div>
-                                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Select Workspace Root Folder</div>
-                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: '1.4' }}>
-                                    Choose the root folder where ArcBench workspace config metadata and <code>.arcbench/architecture.md</code> will live.
-                                </div>
-                                <button 
-                                    type="button" 
-                                    className="btn-primary" 
-                                    onClick={() => handleBrowseWorkspaceRootClick('multi')}
-                                    style={{ padding: '6px 14px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', cursor: 'pointer', background: 'hsl(270,70%,60%)', border: 'none', color: '#fff' }}
-                                >
-                                    {workspaceRootHandle ? "✓ Root Folder Connected" : "Select Root Folder..."}
-                                </button>
-                                {workspaceRootHandle && (
-                                    <div style={{ fontSize: '9.5px', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '6px', wordBreak: 'break-all' }}>
-                                        Selected: <code>{workspaceRootHandle.name}</code>
-                                    </div>
-                                )}
-                            </div>
-
-                            {workspaceRootHandle && (
-                                <>
-                                    {/* Workspace Name Input */}
-                                    <div style={{ marginBottom: '16px', textAlign: 'left' }}>
-                                        <label className="form-label" style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }}>Workspace Name</label>
-                                        <input 
-                                            className="form-input" 
-                                            type="text" 
-                                            value={workspaceName} 
-                                            onChange={(e) => setWorkspaceName(e.target.value)} 
-                                            placeholder="Workspace Name" 
-                                            style={{ fontSize: '11px', padding: '6px 10px', width: '100%', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
-                                        />
-                                    </div>
-
-                                    {/* 2. Add Repository Folders */}
-                                    <div style={{ marginBottom: '12px', textAlign: 'left', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
-                                        <label className="form-label" style={{ fontSize: '11px', display: 'block', fontWeight: 600, marginBottom: '6px' }}>Repository Folders</label>
-                                        <div style={{ fontSize: '9.5px', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: '1.4' }}>
-                                            Add directory references for repositories in this workspace (saved to <code>workspace.json</code>).
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-                                            {reposList.length === 0 ? (
-                                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.6, fontStyle: 'italic', padding: '8px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.02)' }}>
-                                                    No repositories connected. Click Add below.
-                                                </div>
-                                            ) : (
-                                                reposList.map((repo, i) => (
-                                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', fontSize: '10px' }}>
-                                                        <span style={{ fontFamily: 'monospace' }}>✓ {repo}</span>
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => setReposList(reposList.filter((_, idx) => idx !== i))}
-                                                            style={{ background: 'none', border: 'none', color: 'hsl(0, 72%, 62%)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-
-                                        <button 
-                                            type="button" 
-                                            className="btn-secondary" 
-                                            onClick={handleAddRepoFolderClick}
-                                            style={{ padding: '4px 10px', fontSize: '10px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}
-                                        >
-                                            + Add Repository Folder
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-
-                            {scanStatus && (
-                                <div className="wizard-scan-status" style={{ display: 'block', marginTop: '12px', padding: '12px', borderRadius: '10px', background: 'rgba(0,0,0,0.3)', fontSize: '11px', border: '1px solid rgba(255,255,255,0.06)', maxHeight: '280px', overflowY: 'auto', textAlign: 'left' }}>
-                                    {scanStatus.type === 'loading' && <span style={{ color: 'hsl(200, 85%, 75%)' }}>{scanStatus.message}</span>}
-                                    {scanStatus.type === 'error' && <span style={{ color: 'hsl(0, 72%, 62%)', fontWeight: 600 }}>❌ {scanStatus.message}</span>}
-                                    {scanStatus.details}
-                                </div>
-                            )}
-
-                            <div className="wizard-nav" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-                                <button type="button" className="btn-secondary" onClick={() => setStep(2)} style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'inherit' }}>Back</button>
-                                <button 
-                                    type="button" 
-                                    className="btn-primary" 
-                                    disabled={!workspaceRootHandle || reposList.length === 0} 
-                                    onClick={handleCreateWorkspace} 
-                                    style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, background: (workspaceRootHandle && reposList.length > 0) ? 'hsl(270,70%,60%)' : 'rgba(255,255,255,0.05)', border: 'none', color: (workspaceRootHandle && reposList.length > 0) ? '#fff' : 'rgba(255,255,255,0.3)' }}
-                                >
-                                    {(scaffoldNeeded || intent === 'new') ? "Generate Scaffold & Open" : "Open Workspace"}
+                                    {(connectedProjects.some(p => p.status === 'needs_init') || intent === 'new') ? "Generate Scaffold & Open" : "Open Workspace"}
                                 </button>
                             </div>
                         </div>
@@ -760,9 +527,20 @@ Ensure you update only the \`.arcbench/architecture.md\` file when modifying the
                                     type="button" 
                                     className="btn-primary" 
                                     onClick={onClose} 
-                                    style={{ padding: '8px 24px', fontSize: '11.5px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, background: 'hsl(270,70%,60%)', border: 'none', color: '#fff', boxShadow: '0 4px 12px rgba(180,130,255,0.2)' }}
+                                    disabled={isScaffoldOnly}
+                                    style={{ 
+                                        padding: '8px 24px', 
+                                        fontSize: '11.5px', 
+                                        borderRadius: '6px', 
+                                        cursor: isScaffoldOnly ? 'not-allowed' : 'pointer', 
+                                        fontWeight: 600, 
+                                        background: isScaffoldOnly ? 'rgba(255,255,255,0.08)' : 'hsl(270,70%,60%)', 
+                                        border: isScaffoldOnly ? '1px solid rgba(255,255,255,0.1)' : 'none', 
+                                        color: isScaffoldOnly ? 'rgba(255,255,255,0.3)' : '#fff', 
+                                        boxShadow: isScaffoldOnly ? 'none' : '0 4px 12px rgba(180,130,255,0.2)' 
+                                    }}
                                 >
-                                    Open Dashboard Workspace
+                                    {isScaffoldOnly ? '⏳ Waiting for agent output...' : '🚀 Open Dashboard Workspace'}
                                 </button>
                             </div>
                         </div>

@@ -4,6 +4,19 @@ import { DEFAULT_PROJECT_MD } from '../constants/demoSpec';
 
 export const DEFAULT_PROJECT_ID = "demo-sample";
 
+export function getBuiltInDemoProject(): Project | null {
+    try {
+        const builtIn = parseMarkdownToProject(DEFAULT_PROJECT_MD);
+        builtIn.id = DEFAULT_PROJECT_ID;
+        builtIn.title = 'ArcBench Home Demo';
+        builtIn.version = builtIn.version || '1.0';
+        return builtIn;
+    } catch (e) {
+        console.error("Failed to parse built-in demo project:", e);
+        return null;
+    }
+}
+
 export function getCustomProjects(): Project[] {
     try {
         const data = localStorage.getItem("archbench_projects");
@@ -29,12 +42,9 @@ export function getAvailableProjects(): Project[] {
     const list: Project[] = [];
 
     // Always include the built-in public demo project as default
-    try {
-        const builtIn = parseMarkdownToProject(DEFAULT_PROJECT_MD);
-        builtIn.id = DEFAULT_PROJECT_ID;
+    const builtIn = getBuiltInDemoProject();
+    if (builtIn) {
         list.push(builtIn);
-    } catch (e) {
-        console.error("Failed to parse built-in demo project:", e);
     }
 
     custom.forEach(p => {

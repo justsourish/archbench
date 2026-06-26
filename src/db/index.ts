@@ -42,10 +42,19 @@ export interface HealthHistoryEntry {
     databaseDependencyScore: number;
 }
 
+export interface WorkspaceMemberHandleRecord {
+    id: string; // `${workspaceId}:${memberId}`
+    workspaceId: string;
+    memberId: string;
+    handle: FileSystemDirectoryHandle;
+    lastSeenAt: number;
+}
+
 export class ArchBenchDB extends Dexie {
     auditRuns!: Table<AuditRun>;
     architectureSnapshots!: Table<ArchitectureSnapshot>;
     healthHistory!: Table<HealthHistoryEntry>;
+    workspaceMemberHandles!: Table<WorkspaceMemberHandleRecord>;
 
     constructor() {
         super('ArchitectureWorkbenchDexie');
@@ -53,6 +62,13 @@ export class ArchBenchDB extends Dexie {
             auditRuns: 'id, projectId, timestamp',
             architectureSnapshots: 'id, projectId, timestamp',
             healthHistory: 'id, projectId, timestamp'
+        });
+
+        this.version(2).stores({
+            auditRuns: 'id, projectId, timestamp',
+            architectureSnapshots: 'id, projectId, timestamp',
+            healthHistory: 'id, projectId, timestamp',
+            workspaceMemberHandles: 'id, workspaceId, memberId, lastSeenAt'
         });
     }
 }
@@ -162,4 +178,37 @@ export async function clearProjectHistoryFromDB(projectId: string): Promise<void
         await db.architectureSnapshots.where('projectId').equals(projectId).delete();
         await db.healthHistory.where('projectId').equals(projectId).delete();
     });
+}
+
+export async function upsertWorkspaceMemberHandle(
+    workspaceId: string,
+    memberId: string,
+    handle: FileSystemDirectoryHandle
+): Promise<void> {
+    await db.workspaceMemberHandles.put({
+        id: `${workspaceId}:${memberId}`,
+        workspaceId,
+        memberId,
+        handle,
+        lastSeenAt: Date.now()
+    });
+}
+
+export async function removeWorkspaceMemberHandle(workspaceId: string, memberId: string): Promise<void> {
+    await db.workspaceMemberHandles.delete(`${workspaceId}:${memberId}`);
+}
+
+export async function removeWorkspaceMemberHandlesByWorkspace(workspaceId: string): Promise<void> {
+    await db.workspaceMemberHandles.where('workspaceId').equals(workspaceId).delete();
+}
+
+export async function getWorkspaceMemberHandleMap(workspaceIds: string[]): Promise<Map<string, FileSystemDirectoryHandle>> {
+    const map = new Map<string, FileSystemDirectoryHandle>();
+    if (workspaceIds.length === 0) return map;
+
+    const records = await db.workspaceMemberHandles.where('workspaceId').anyOf(workspaceIds).toArray();
+    records.forEach(record => {
+        map.set(`${record.workspaceId}:${record.memberId}`, record.handle);
+    });
+    return map;
 }
